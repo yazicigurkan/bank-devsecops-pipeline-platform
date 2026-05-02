@@ -1,0 +1,36 @@
+name: reusable SDLC dry run
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        required: false
+        type: string
+        default: all
+      caller_repository:
+        required: true
+        type: string
+    outputs:
+      dry_run_mode:
+        value: ${{ jobs.dry_run.outputs.dry_run_mode }}
+
+jobs:
+  dry_run:
+    runs-on: ubuntu-latest
+    outputs:
+      dry_run_mode: ${{ steps.result.outputs.dry_run_mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: yazicigurkan/bank-devsecops-pipeline-platform
+          ref: v1.0.2
+      - name: Run SDLC dry run
+        run: |
+          case "${{ inputs.mode }}" in
+            all|dev|test|prod|negative) ;;
+            *) echo "Unsupported dry-run mode: ${{ inputs.mode }}" >&2; exit 1 ;;
+          esac
+          echo "Running SDLC dry-run for ${{ inputs.caller_repository }} with mode=${{ inputs.mode }}"
+          scripts/local/simulate-pipeline.sh "${{ inputs.mode }}"
+      - id: result
+        run: echo "dry_run_mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
