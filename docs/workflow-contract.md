@@ -23,13 +23,13 @@ Bu dokuman uygulama repo'larinin merkezi platform workflow'larini hangi kontratl
 Uygulama repo'lari workflow'lari tag ile cagirmalidir:
 
 ```yaml
-uses: bank-org/bank-devsecops-pipeline-platform/.github/workflows/dotnet-jira-test-release.yaml@v1.0.0
+uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-jira-test-release.yaml@v1.0.0
 ```
 
 Merkezi workflow'lar kendi composite action ve scriptlerini de `platform_repository` ve `platform_ref` input'lariyla checkout eder. Varsayilan:
 
 ```yaml
-platform_repository: bank-org/bank-devsecops-pipeline-platform
+platform_repository: yazicigurkan/bank-devsecops-pipeline-platform
 platform_ref: v1.0.0
 ```
 

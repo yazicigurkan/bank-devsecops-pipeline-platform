@@ -3,7 +3,7 @@
   "client_payload": {
     "jira_issue_key": "SDLC-1234",
     "application_name": "payment-api",
-    "repository_name": "bank-org/banking-dotnet-payment-api",
+    "repository_name": "yazicigurkan/banking-dotnet-payment-api",
     "branch_name": "PROD",
     "target_environment": "PROD",
     "deployment_type": "kubernetes",

@@ -2,7 +2,7 @@
 
 ## 1. Executive Architecture Summary
 
-Bu mimari, uygulama ekiplerinin pipeline logic yazmadigi, merkezi DevOps ekibinin ise reusable GitHub Actions workflow ve composite action'lari versiyonlayarak sundugu bir SDLC platformudur. Uygulama repolari yalnizca `uses: bank-org/bank-devsecops-pipeline-platform/...@v1.0.0` seklinde merkezi workflow'lari cagirir.
+Bu mimari, uygulama ekiplerinin pipeline logic yazmadigi, merkezi DevOps ekibinin ise reusable GitHub Actions workflow ve composite action'lari versiyonlayarak sundugu bir SDLC platformudur. Uygulama repolari yalnizca `uses: yazicigurkan/bank-devsecops-pipeline-platform/...@v1.0.0` seklinde merkezi workflow'lari cagirir.
 
 Temel kararlar:
 

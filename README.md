@@ -7,7 +7,7 @@ Bu repo pipeline logic'in merkezi sahibidir. Uygulama repository'leri kendi pipe
 ```yaml
 jobs:
   dev:
-    uses: bank-org/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.0
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.0
     with:
       application_name: payment-api
       deployment_type: kubernetes
