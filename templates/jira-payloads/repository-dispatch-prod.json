@@ -1,0 +1,15 @@
+{
+  "event_type": "jira-prod-deploy",
+  "client_payload": {
+    "jira_issue_key": "SDLC-1234",
+    "application_name": "payment-api",
+    "repository_name": "bank-org/banking-dotnet-payment-api",
+    "branch_name": "PROD",
+    "target_environment": "PROD",
+    "deployment_type": "kubernetes",
+    "release_version": "1.4.2",
+    "change_window": "2026-05-02T21:00:00+03:00/2026-05-02T23:00:00+03:00",
+    "deployment_notes": "Promote TEST-approved release to PROD.",
+    "rollback_strategy": "Helm rollback to previous revision or IIS backup restore."
+  }
+}

@@ -1,0 +1,41 @@
+name: Jira TEST Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      jira_issue_key:
+        required: true
+        type: string
+      release_version:
+        required: true
+        type: string
+      deployment_type:
+        required: true
+        type: choice
+        options: [iis, kubernetes]
+  repository_dispatch:
+    types: [jira-test-deploy]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    uses: bank-org/bank-devsecops-pipeline-platform/.github/workflows/dotnet-jira-test-release.yaml@v1.0.0
+    with:
+      jira_issue_key: ${{ github.event.inputs.jira_issue_key || github.event.client_payload.jira_issue_key }}
+      application_name: CHANGE_ME
+      repository_name: ${{ github.repository }}
+      branch_name: TEST
+      release_version: ${{ github.event.inputs.release_version || github.event.client_payload.release_version }}
+      deployment_type: ${{ github.event.inputs.deployment_type || github.event.client_payload.deployment_type }}
+      target_environment: TEST
+      dotnet_solution: CHANGE_ME.sln
+      project_path: src/CHANGE_ME/CHANGE_ME.csproj
+      test_project_path: tests/CHANGE_ME.Tests/CHANGE_ME.Tests.csproj
+      sonar_project_key: CHANGE_ME
+      graphnode_project_key: CHANGE_ME
+      nexus_repository: dotnet-releases
+      health_check_url: https://CHANGE_ME.test.bank.local/health
+    secrets: inherit

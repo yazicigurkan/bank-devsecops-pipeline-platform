@@ -1,0 +1,72 @@
+name: reusable release governance
+
+on:
+  workflow_call:
+    inputs:
+      application_name: { required: true, type: string }
+      release_version: { required: true, type: string }
+      deployment_type: { required: true, type: string }
+      jira_issue_key: { required: true, type: string }
+      require_test_evidence: { required: false, type: boolean, default: true }
+      require_change_window: { required: false, type: boolean, default: true }
+      require_rollback_plan: { required: false, type: boolean, default: true }
+    outputs:
+      artifact_url:
+        value: ${{ jobs.governance.outputs.artifact_url }}
+      image_digest:
+        value: ${{ jobs.governance.outputs.image_digest }}
+      promoted_image_tag:
+        value: ${{ jobs.governance.outputs.promoted_image_tag }}
+    secrets:
+      NEXUS_BASE_URL: { required: true }
+      NEXUS_USERNAME: { required: true }
+      NEXUS_PASSWORD: { required: true }
+
+jobs:
+  governance:
+    runs-on: self-hosted
+    outputs:
+      artifact_url: ${{ steps.validate.outputs.artifact_url }}
+      image_digest: ${{ steps.validate.outputs.image_digest }}
+      promoted_image_tag: ${{ steps.validate.outputs.promoted_image_tag }}
+    steps:
+      - id: validate
+        env:
+          NEXUS_BASE_URL: ${{ secrets.NEXUS_BASE_URL }}
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          fail() {
+            echo "Release governance failed: $1" >&2
+            exit 1
+          }
+          manifest_url="${NEXUS_BASE_URL}/repository/release-evidence/${{ inputs.application_name }}/${{ inputs.release_version }}/release-manifest.json"
+          curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" -o release-manifest.json "$manifest_url"
+          [ "$(jq -r '.application' release-manifest.json)" = "${{ inputs.application_name }}" ] || fail "application mismatch"
+          [ "$(jq -r '.version' release-manifest.json)" = "${{ inputs.release_version }}" ] || fail "version mismatch"
+          [ "$(jq -r '.jiraIssueKey' release-manifest.json)" = "${{ inputs.jira_issue_key }}" ] || fail "jira issue mismatch"
+          [ "$(jq -r '.testDeployment.status' release-manifest.json)" = "APPROVED" ] || fail "TEST evidence is not approved"
+          [ "$(jq -r '.sonarQualityGate' release-manifest.json)" = "PASSED" ] || fail "SonarQube Quality Gate is not passed"
+          [ "$(jq -r '.graphNode.critical // 0' release-manifest.json)" = "0" ] || fail "GraphNode critical findings exist"
+          [ "$(jq -r '.graphNode.high // 0' release-manifest.json)" = "0" ] || fail "GraphNode high findings exist"
+          [ "$(jq -r '.twistlock.critical // 0' release-manifest.json)" = "0" ] || fail "Twistlock critical vulnerabilities exist"
+          [ "$(jq -r '.twistlock.high // 0' release-manifest.json)" = "0" ] || fail "Twistlock high vulnerabilities exist"
+          if [ "${{ inputs.require_rollback_plan }}" = "true" ]; then
+            [ "$(jq -r '.rollbackPlan // empty' release-manifest.json)" != "" ] || fail "rollback plan missing"
+          fi
+          if [ "${{ inputs.deployment_type }}" = "iis" ]; then
+            artifact_url="$(jq -r '.artifactUrl' release-manifest.json)"
+            [ "$artifact_url" != "" ] || fail "artifactUrl missing"
+            curl -fsSI -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" "$artifact_url" >/dev/null || fail "artifact does not exist in Nexus"
+            echo "artifact_url=${artifact_url}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.deployment_type }}" = "kubernetes" ]; then
+            image_digest="$(jq -r '.imageDigest // empty' release-manifest.json)"
+            image_tag="$(jq -r '.prodPromotion.imageTag // .imageTag // empty' release-manifest.json)"
+            [ "$image_digest" != "" ] || fail "imageDigest missing"
+            [ "$image_tag" != "" ] || fail "imageTag missing"
+            echo "image_digest=${image_digest}" >> "$GITHUB_OUTPUT"
+            echo "promoted_image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          else
+            fail "unsupported deployment_type=${{ inputs.deployment_type }}"
+          fi

@@ -1,0 +1,46 @@
+name: reusable nexus publish
+
+on:
+  workflow_call:
+    inputs:
+      application_name: { required: true, type: string }
+      environment: { required: true, type: string }
+      release_version: { required: true, type: string }
+      nexus_repository: { required: true, type: string }
+      artifact_name: { required: true, type: string }
+    outputs:
+      artifact_version:
+        value: ${{ jobs.publish.outputs.artifact_version }}
+      artifact_url:
+        value: ${{ jobs.publish.outputs.artifact_url }}
+    secrets:
+      NEXUS_BASE_URL: { required: true }
+      NEXUS_USERNAME: { required: true }
+      NEXUS_PASSWORD: { required: true }
+
+jobs:
+  publish:
+    runs-on: self-hosted
+    outputs:
+      artifact_version: ${{ steps.meta.outputs.artifact_version }}
+      artifact_url: ${{ steps.upload.outputs.artifact_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+      - id: meta
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          version="${{ inputs.release_version }}-${{ inputs.environment }}-${short_sha}-${{ github.run_number }}"
+          echo "artifact_version=${version}" >> "$GITHUB_OUTPUT"
+      - id: upload
+        env:
+          NEXUS_BASE_URL: ${{ secrets.NEXUS_BASE_URL }}
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          target="${NEXUS_BASE_URL}/repository/${{ inputs.nexus_repository }}/${{ inputs.application_name }}/${{ steps.meta.outputs.artifact_version }}/${{ inputs.application_name }}.zip"
+          curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" --upload-file package.zip "$target"
+          echo "artifact_url=${target}" >> "$GITHUB_OUTPUT"
+

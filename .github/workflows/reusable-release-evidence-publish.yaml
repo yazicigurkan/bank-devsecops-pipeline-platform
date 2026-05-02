@@ -1,0 +1,110 @@
+name: reusable release evidence publish
+
+on:
+  workflow_call:
+    inputs:
+      application_name: { required: true, type: string }
+      release_version: { required: true, type: string }
+      environment: { required: true, type: string }
+      deployment_type: { required: true, type: string }
+      jira_issue_key: { required: true, type: string }
+      artifact_url: { required: true, type: string }
+      artifact_version: { required: true, type: string }
+      image_reference: { required: false, type: string, default: "" }
+      image_tag: { required: false, type: string, default: "" }
+      image_digest: { required: false, type: string, default: "" }
+      sonar_quality_gate: { required: true, type: string }
+      sonar_dashboard_url: { required: false, type: string, default: "" }
+      graphnode_scan_id: { required: false, type: string, default: "" }
+      graphnode_report_url: { required: false, type: string, default: "" }
+      graphnode_critical: { required: false, type: string, default: "0" }
+      graphnode_high: { required: false, type: string, default: "0" }
+      graphnode_medium: { required: false, type: string, default: "0" }
+      graphnode_low: { required: false, type: string, default: "0" }
+      twistlock_scan_id: { required: false, type: string, default: "" }
+      twistlock_report_url: { required: false, type: string, default: "" }
+      twistlock_critical: { required: false, type: string, default: "0" }
+      twistlock_high: { required: false, type: string, default: "0" }
+      approved_by: { required: false, type: string, default: "{}" }
+      test_approved_by: { required: false, type: string, default: "" }
+    outputs:
+      manifest_url:
+        value: ${{ jobs.publish.outputs.manifest_url }}
+    secrets:
+      NEXUS_BASE_URL: { required: true }
+      NEXUS_USERNAME: { required: true }
+      NEXUS_PASSWORD: { required: true }
+
+jobs:
+  publish:
+    runs-on: self-hosted
+    outputs:
+      manifest_url: ${{ steps.upload.outputs.manifest_url }}
+    steps:
+      - name: Create release manifest
+        env:
+          APPROVED_BY_JSON: ${{ inputs.approved_by }}
+        run: |
+          set -euo pipefail
+          approved_by=$(jq -c . <<< "${APPROVED_BY_JSON}" 2>/dev/null || echo '{}')
+          jq -n \
+            --arg application "${{ inputs.application_name }}" \
+            --arg version "${{ inputs.release_version }}" \
+            --arg environment "${{ inputs.environment }}" \
+            --arg deploymentType "${{ inputs.deployment_type }}" \
+            --arg commitSha "${GITHUB_SHA}" \
+            --arg artifactUrl "${{ inputs.artifact_url }}" \
+            --arg artifactVersion "${{ inputs.artifact_version }}" \
+            --arg image "${{ inputs.image_reference }}" \
+            --arg imageTag "${{ inputs.image_tag }}" \
+            --arg imageDigest "${{ inputs.image_digest }}" \
+            --arg sonarQualityGate "${{ inputs.sonar_quality_gate }}" \
+            --arg sonarDashboardUrl "${{ inputs.sonar_dashboard_url }}" \
+            --arg graphNodeScanId "${{ inputs.graphnode_scan_id }}" \
+            --arg graphNodeReportUrl "${{ inputs.graphnode_report_url }}" \
+            --argjson graphNodeCritical "${{ inputs.graphnode_critical }}" \
+            --argjson graphNodeHigh "${{ inputs.graphnode_high }}" \
+            --argjson graphNodeMedium "${{ inputs.graphnode_medium }}" \
+            --argjson graphNodeLow "${{ inputs.graphnode_low }}" \
+            --arg twistlockScanId "${{ inputs.twistlock_scan_id }}" \
+            --arg twistlockReportUrl "${{ inputs.twistlock_report_url }}" \
+            --argjson twistlockCritical "${{ inputs.twistlock_critical }}" \
+            --argjson twistlockHigh "${{ inputs.twistlock_high }}" \
+            --arg jiraIssueKey "${{ inputs.jira_issue_key }}" \
+            --arg testApprovedBy "${{ inputs.test_approved_by }}" \
+            --arg createdAt "$(date -Iseconds)" \
+            --argjson approvedBy "$approved_by" \
+            '{
+              application:$application,
+              version:$version,
+              environment:$environment,
+              deploymentType:$deploymentType,
+              commitSha:$commitSha,
+              artifactUrl:$artifactUrl,
+              artifactVersion:$artifactVersion,
+              image:$image,
+              imageTag:$imageTag,
+              imageDigest:$imageDigest,
+              sonarQualityGate:$sonarQualityGate,
+              sonarDashboardUrl:$sonarDashboardUrl,
+              graphNode:{scanId:$graphNodeScanId,critical:$graphNodeCritical,high:$graphNodeHigh,medium:$graphNodeMedium,low:$graphNodeLow,reportUrl:$graphNodeReportUrl},
+              twistlock:{scanId:$twistlockScanId,critical:$twistlockCritical,high:$twistlockHigh,reportUrl:$twistlockReportUrl},
+              jiraIssueKey:$jiraIssueKey,
+              approvedBy:$approvedBy,
+              testApprovedBy:$testApprovedBy,
+              testDeployment:{environment:$environment,status:"APPROVED"},
+              rollbackPlan:"Rollback uses the previous Nexus artifact for IIS or Helm rollback for Kubernetes.",
+              createdAt:$createdAt
+            }' > release-manifest.json
+      - id: upload
+        env:
+          NEXUS_BASE_URL: ${{ secrets.NEXUS_BASE_URL }}
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          target="${NEXUS_BASE_URL}/repository/release-evidence/${{ inputs.application_name }}/${{ inputs.release_version }}/release-manifest.json"
+          curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" --upload-file release-manifest.json "$target"
+          echo "manifest_url=${target}" >> "$GITHUB_OUTPUT"
+          echo "### Release evidence" >> "$GITHUB_STEP_SUMMARY"
+          jq -r --arg target "$target" '"- Manifest: " + $target' release-manifest.json >> "$GITHUB_STEP_SUMMARY"

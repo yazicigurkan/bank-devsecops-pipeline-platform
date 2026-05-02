@@ -1,0 +1,14 @@
+{
+  "event_type": "jira-test-deploy",
+  "client_payload": {
+    "jira_issue_key": "SDLC-1234",
+    "application_name": "payment-api",
+    "repository_name": "bank-org/banking-dotnet-payment-api",
+    "branch_name": "TEST",
+    "target_environment": "TEST",
+    "deployment_type": "kubernetes",
+    "release_version": "1.4.2",
+    "change_window": "",
+    "deployment_notes": "Deploy release candidate to TEST."
+  }
+}

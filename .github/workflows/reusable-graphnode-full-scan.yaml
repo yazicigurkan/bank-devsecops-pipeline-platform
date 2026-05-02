@@ -1,0 +1,53 @@
+name: reusable graphnode full scan
+
+on:
+  workflow_call:
+    inputs:
+      project_key: { required: true, type: string }
+      repository: { required: true, type: string }
+      branch: { required: true, type: string }
+      environment: { required: false, type: string, default: ONBOARDING }
+      jira_issue_key: { required: false, type: string, default: "" }
+      checkout_ref: { required: false, type: string, default: "" }
+      platform_repository: { required: false, type: string, default: bank-org/bank-devsecops-pipeline-platform }
+      platform_ref: { required: false, type: string, default: v1.0.0 }
+    outputs:
+      scan_id:
+        value: ${{ jobs.full_scan.outputs.scan_id }}
+      report_url:
+        value: ${{ jobs.full_scan.outputs.report_url }}
+    secrets:
+      GRAPHNODE_BASE_URL: { required: true }
+      GRAPHNODE_TOKEN: { required: true }
+
+jobs:
+  full_scan:
+    runs-on: self-hosted
+    outputs:
+      scan_id: ${{ steps.scan.outputs.scan_id }}
+      report_url: ${{ steps.scan.outputs.report_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.checkout_ref || github.ref_name }}
+      - name: Checkout pipeline platform actions
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: .pipeline-platform
+      - id: scan
+        uses: ./.pipeline-platform/actions/graphnode-scan
+        with:
+          base_url: ${{ secrets.GRAPHNODE_BASE_URL }}
+          token: ${{ secrets.GRAPHNODE_TOKEN }}
+          project_key: ${{ inputs.project_key }}
+          repository: ${{ inputs.repository }}
+          branch: ${{ inputs.branch }}
+          commit_sha: ${{ github.sha }}
+          previous_commit_sha: ""
+          environment: ${{ inputs.environment }}
+          jira_issue_key: ${{ inputs.jira_issue_key }}
+          fail_on_high: true
+          scan_type: full

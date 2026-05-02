@@ -1,0 +1,63 @@
+name: reusable iis deploy
+
+on:
+  workflow_call:
+    inputs:
+      application_name: { required: true, type: string }
+      environment: { required: true, type: string }
+      artifact_version: { required: true, type: string }
+      nexus_artifact_url: { required: true, type: string }
+      iis_server_group: { required: true, type: string }
+      iis_site_name: { required: true, type: string }
+      iis_app_pool_name: { required: true, type: string }
+      deploy_path: { required: true, type: string }
+      health_check_url: { required: true, type: string }
+      rollback_enabled: { required: false, type: boolean, default: true }
+      platform_repository: { required: false, type: string, default: bank-org/bank-devsecops-pipeline-platform }
+      platform_ref: { required: false, type: string, default: v1.0.0 }
+    secrets:
+      NEXUS_USERNAME: { required: true }
+      NEXUS_PASSWORD: { required: true }
+      WINDOWS_DEPLOY_USERNAME: { required: true }
+      WINDOWS_DEPLOY_PASSWORD: { required: true }
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows, iis]
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout pipeline platform scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: .pipeline-platform
+      - name: Download artifact from Nexus
+        shell: pwsh
+        env:
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: |
+          .\.pipeline-platform\scripts\nexus\download-artifact.ps1 `
+            -ArtifactUrl "${{ inputs.nexus_artifact_url }}" `
+            -OutputPath ".\artifact.zip" `
+            -Username "$env:NEXUS_USERNAME" `
+            -Password "$env:NEXUS_PASSWORD"
+      - name: Deploy to IIS
+        shell: pwsh
+        env:
+          WINDOWS_DEPLOY_USERNAME: ${{ secrets.WINDOWS_DEPLOY_USERNAME }}
+          WINDOWS_DEPLOY_PASSWORD: ${{ secrets.WINDOWS_DEPLOY_PASSWORD }}
+        run: |
+          .\.pipeline-platform\scripts\iis\deploy-iis.ps1 `
+            -ApplicationName "${{ inputs.application_name }}" `
+            -Environment "${{ inputs.environment }}" `
+            -ArtifactPath ".\artifact.zip" `
+            -ServerGroup "${{ inputs.iis_server_group }}" `
+            -SiteName "${{ inputs.iis_site_name }}" `
+            -AppPoolName "${{ inputs.iis_app_pool_name }}" `
+            -DeployPath "${{ inputs.deploy_path }}" `
+            -HealthCheckUrl "${{ inputs.health_check_url }}" `
+            -RollbackEnabled ([bool]::Parse("${{ inputs.rollback_enabled }}")) `
+            -Username "$env:WINDOWS_DEPLOY_USERNAME" `
+            -Password "$env:WINDOWS_DEPLOY_PASSWORD"

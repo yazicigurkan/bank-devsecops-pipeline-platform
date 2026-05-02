@@ -1,0 +1,77 @@
+name: GraphNode SAST Scan
+description: Runs GraphNode incremental SAST scan and enforces severity policy.
+inputs:
+  base_url: { required: true }
+  token: { required: true }
+  project_key: { required: true }
+  repository: { required: true }
+  branch: { required: true }
+  commit_sha: { required: true }
+  previous_commit_sha: { required: false, default: "" }
+  environment: { required: true }
+  jira_issue_key: { required: false, default: "" }
+  fail_on_high: { required: false, default: "true" }
+  scan_type: { required: false, default: incremental }
+outputs:
+  scan_id:
+    value: ${{ steps.scan.outputs.scan_id }}
+  report_url:
+    value: ${{ steps.scan.outputs.report_url }}
+  critical:
+    value: ${{ steps.scan.outputs.critical }}
+  high:
+    value: ${{ steps.scan.outputs.high }}
+  medium:
+    value: ${{ steps.scan.outputs.medium }}
+  low:
+    value: ${{ steps.scan.outputs.low }}
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      env:
+        GRAPHNODE_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        payload=$(jq -n \
+          --arg repository "${{ inputs.repository }}" \
+          --arg branch "${{ inputs.branch }}" \
+          --arg commitSha "${{ inputs.commit_sha }}" \
+          --arg previousCommitSha "${{ inputs.previous_commit_sha }}" \
+          --arg environment "${{ inputs.environment }}" \
+          --arg jiraIssueKey "${{ inputs.jira_issue_key }}" \
+          '{repository:$repository, branch:$branch, commitSha:$commitSha, previousCommitSha:$previousCommitSha, environment:$environment, jiraIssueKey:$jiraIssueKey}')
+        endpoint="incremental-scan"
+        if [ "${{ inputs.scan_type }}" = "full" ]; then
+          endpoint="full-scan"
+        fi
+        response=$(curl -fsS -X POST \
+          -H "Authorization: Bearer ${GRAPHNODE_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d "$payload" \
+          "${{ inputs.base_url }}/api/projects/${{ inputs.project_key }}/${endpoint}")
+        echo "$response" > graphnode-result.json
+        scan_id=$(jq -r '.scanId' graphnode-result.json)
+        report_url=$(jq -r '.reportUrl' graphnode-result.json)
+        critical=$(jq -r '.critical // 0' graphnode-result.json)
+        high=$(jq -r '.high // 0' graphnode-result.json)
+        medium=$(jq -r '.medium // 0' graphnode-result.json)
+        low=$(jq -r '.low // 0' graphnode-result.json)
+        echo "scan_id=${scan_id}" >> "$GITHUB_OUTPUT"
+        echo "report_url=${report_url}" >> "$GITHUB_OUTPUT"
+        echo "critical=${critical}" >> "$GITHUB_OUTPUT"
+        echo "high=${high}" >> "$GITHUB_OUTPUT"
+        echo "medium=${medium}" >> "$GITHUB_OUTPUT"
+        echo "low=${low}" >> "$GITHUB_OUTPUT"
+        if [ "$critical" -gt 0 ]; then
+          echo "GraphNode critical findings: ${critical}" >&2
+          exit 1
+        fi
+        if [ "$high" -gt 0 ] && [ "${{ inputs.fail_on_high }}" = "true" ]; then
+          echo "GraphNode high findings: ${high}" >&2
+          exit 1
+        fi
+        if [ "$high" -gt 0 ]; then
+          echo "::warning::GraphNode high findings detected: ${high}"
+        fi

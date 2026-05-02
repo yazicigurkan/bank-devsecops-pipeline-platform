@@ -1,0 +1,18 @@
+name: Nexus Version Resolver
+description: Produces controlled artifact version string.
+inputs:
+  application_name: { required: true }
+  environment: { required: true }
+  release_version: { required: true }
+outputs:
+  artifact_version:
+    value: ${{ steps.version.outputs.artifact_version }}
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: bash
+      run: |
+        short_sha="${GITHUB_SHA::7}"
+        echo "artifact_version=${{ inputs.release_version }}-${{ inputs.environment }}-${short_sha}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+

@@ -1,0 +1,67 @@
+name: reusable graphnode sast
+
+on:
+  workflow_call:
+    inputs:
+      project_key: { required: true, type: string }
+      repository: { required: true, type: string }
+      branch: { required: true, type: string }
+      environment: { required: true, type: string }
+      jira_issue_key: { required: false, type: string, default: "" }
+      fail_on_high: { required: false, type: boolean, default: true }
+      checkout_ref: { required: false, type: string, default: "" }
+      platform_repository: { required: false, type: string, default: bank-org/bank-devsecops-pipeline-platform }
+      platform_ref: { required: false, type: string, default: v1.0.0 }
+    outputs:
+      scan_id:
+        value: ${{ jobs.graphnode.outputs.scan_id }}
+      report_url:
+        value: ${{ jobs.graphnode.outputs.report_url }}
+      critical:
+        value: ${{ jobs.graphnode.outputs.critical }}
+      high:
+        value: ${{ jobs.graphnode.outputs.high }}
+      medium:
+        value: ${{ jobs.graphnode.outputs.medium }}
+      low:
+        value: ${{ jobs.graphnode.outputs.low }}
+    secrets:
+      GRAPHNODE_BASE_URL: { required: true }
+      GRAPHNODE_TOKEN: { required: true }
+
+jobs:
+  graphnode:
+    runs-on: self-hosted
+    outputs:
+      scan_id: ${{ steps.scan.outputs.scan_id }}
+      report_url: ${{ steps.scan.outputs.report_url }}
+      critical: ${{ steps.scan.outputs.critical }}
+      high: ${{ steps.scan.outputs.high }}
+      medium: ${{ steps.scan.outputs.medium }}
+      low: ${{ steps.scan.outputs.low }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          ref: ${{ inputs.checkout_ref || github.ref_name }}
+      - name: Checkout pipeline platform actions
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: .pipeline-platform
+      - id: prev
+        run: echo "previous_sha=$(git rev-parse HEAD^ 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+      - id: scan
+        uses: ./.pipeline-platform/actions/graphnode-scan
+        with:
+          base_url: ${{ secrets.GRAPHNODE_BASE_URL }}
+          token: ${{ secrets.GRAPHNODE_TOKEN }}
+          project_key: ${{ inputs.project_key }}
+          repository: ${{ inputs.repository }}
+          branch: ${{ inputs.branch }}
+          commit_sha: ${{ github.sha }}
+          previous_commit_sha: ${{ steps.prev.outputs.previous_sha }}
+          environment: ${{ inputs.environment }}
+          jira_issue_key: ${{ inputs.jira_issue_key }}
+          fail_on_high: ${{ inputs.fail_on_high }}

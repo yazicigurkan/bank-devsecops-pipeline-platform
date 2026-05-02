@@ -1,0 +1,99 @@
+name: Jira Status and Approval Check
+description: Validates Jira issue status and approval fields before deployment.
+inputs:
+  base_url: { required: true }
+  user_email: { required: true }
+  api_token: { required: true }
+  issue_key: { required: true }
+  target_environment: { required: true }
+  allowed_statuses: { required: true }
+  required_approvals: { required: true }
+  manager_approval_field: { required: false, default: customfield_managerApproval }
+  security_approval_field: { required: false, default: customfield_securityApproval }
+  test_approval_field: { required: false, default: customfield_testApproval }
+  change_window_field: { required: false, default: customfield_changeWindow }
+  rollback_plan_field: { required: false, default: customfield_rollbackPlan }
+outputs:
+  current_status:
+    value: ${{ steps.validate.outputs.current_status }}
+  approved_by:
+    value: ${{ steps.validate.outputs.approved_by }}
+runs:
+  using: composite
+  steps:
+    - id: validate
+      shell: bash
+      env:
+        JIRA_USER_EMAIL: ${{ inputs.user_email }}
+        JIRA_API_TOKEN: ${{ inputs.api_token }}
+      run: |
+        set -euo pipefail
+        fields="status,${{ inputs.manager_approval_field }},${{ inputs.security_approval_field }},${{ inputs.test_approval_field }},${{ inputs.change_window_field }},${{ inputs.rollback_plan_field }}"
+        curl -fsS -u "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
+          "${{ inputs.base_url }}/rest/api/3/issue/${{ inputs.issue_key }}?fields=${fields}" \
+          -o jira-issue.json
+        status=$(jq -r '.fields.status.name' jira-issue.json)
+        echo "current_status=${status}" >> "$GITHUB_OUTPUT"
+        IFS=',' read -ra allowed <<< "${{ inputs.allowed_statuses }}"
+        matched=false
+        for item in "${allowed[@]}"; do
+          item="$(echo "$item" | sed 's/^ *//;s/ *$//')"
+          [ "$status" = "$item" ] && matched=true
+        done
+        if [ "$matched" != "true" ]; then
+          echo "Jira issue ${{ inputs.issue_key }} is in '${status}', allowed: ${{ inputs.allowed_statuses }}" >&2
+          exit 1
+        fi
+        read_field() {
+          local field_name="$1"
+          jq -r --arg field "$field_name" '
+            def scalar:
+              if type == "object" then (.value // .name // .displayName // .key // empty)
+              elif type == "array" then map(if type == "object" then (.value // .name // .displayName // .key // tostring) else tostring end) | join(",")
+              else tostring
+              end;
+            .fields[$field] // empty | scalar
+          ' jira-issue.json
+        }
+        approvals="${{ inputs.required_approvals }}"
+        manager_approval="$(read_field "${{ inputs.manager_approval_field }}")"
+        security_approval="$(read_field "${{ inputs.security_approval_field }}")"
+        test_approval="$(read_field "${{ inputs.test_approval_field }}")"
+        if [[ "$approvals" == *"manager"* ]] && [ "$manager_approval" != "Approved" ]; then
+          echo "Missing manager approval" >&2
+          exit 1
+        fi
+        if [[ "$approvals" == *"information-security"* ]] && [ "$security_approval" != "Approved" ]; then
+          echo "Missing information security approval" >&2
+          exit 1
+        fi
+        if [[ "$approvals" == *"test-lead"* ]] && [ "$test_approval" != "Approved" ]; then
+          echo "Missing test approval" >&2
+          exit 1
+        fi
+        if [ "${{ inputs.target_environment }}" = "PROD" ]; then
+          change_window="$(read_field "${{ inputs.change_window_field }}")"
+          if [ "$change_window" = "" ]; then
+            echo "Missing PROD change window" >&2
+            exit 1
+          fi
+          if [ "$(read_field "${{ inputs.rollback_plan_field }}")" = "" ]; then
+            echo "Missing PROD rollback plan" >&2
+            exit 1
+          fi
+          if [[ "$change_window" == *"/"* ]] && command -v date >/dev/null 2>&1; then
+            start="${change_window%%/*}"
+            end="${change_window#*/}"
+            if start_ts=$(date -d "$start" +%s 2>/dev/null) && end_ts=$(date -d "$end" +%s 2>/dev/null); then
+              now_ts=$(date +%s)
+              if [ "$now_ts" -lt "$start_ts" ] || [ "$now_ts" -gt "$end_ts" ]; then
+                echo "Current time is outside Jira change window: $change_window" >&2
+                exit 1
+              fi
+            else
+              echo "::warning::Could not parse Jira change window '$change_window'; non-empty check passed only."
+            fi
+          fi
+        fi
+        approved_by=$(jq -n --arg manager "$manager_approval" --arg security "$security_approval" --arg test "$test_approval" '{manager:$manager,security:$security,test:$test}')
+        echo "approved_by=${approved_by}" >> "$GITHUB_OUTPUT"

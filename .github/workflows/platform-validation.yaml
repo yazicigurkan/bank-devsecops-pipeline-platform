@@ -1,0 +1,27 @@
+name: platform validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate YAML files
+        run: |
+          ruby -e 'require "yaml"; files = Dir[".github/workflows/*.{yaml,yml}"] + Dir["actions/*/action.yaml"] + Dir["templates/app-repo-workflows/*.{yaml,yml}"]; files.each { |f| YAML.load_file(f); puts "OK #{f}" }'
+      - name: Validate shell scripts
+        run: find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
+      - name: Validate JSON templates
+        run: |
+          ruby -rjson -e 'Dir["templates/**/*.json"].each { |f| JSON.parse(File.read(f)); puts "OK #{f}" }'
+      - name: Run local dry-run
+        run: |
+          scripts/local/simulate-pipeline.sh all
+          scripts/local/simulate-pipeline.sh negative

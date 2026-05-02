@@ -1,0 +1,54 @@
+name: reusable k8s deploy
+
+on:
+  workflow_call:
+    inputs:
+      application_name: { required: true, type: string }
+      environment: { required: true, type: string }
+      image_name: { required: true, type: string }
+      image_tag: { required: true, type: string }
+      image_digest: { required: false, type: string, default: "" }
+      harbor_project: { required: true, type: string }
+      k8s_namespace: { required: true, type: string }
+      helm_chart_path: { required: true, type: string }
+      helm_values_file: { required: true, type: string }
+      release_name: { required: true, type: string }
+      health_check_url: { required: true, type: string }
+      rollback_enabled: { required: false, type: boolean, default: true }
+      checkout_ref: { required: false, type: string, default: "" }
+    secrets:
+      HARBOR_REGISTRY: { required: true }
+      KUBE_CONFIG: { required: true }
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, k8s]
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref_name }}
+      - name: Configure kubeconfig
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${KUBE_CONFIG_B64}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Helm deploy
+        env:
+          HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY }}
+        run: |
+          image_repository="${HARBOR_REGISTRY}/${{ inputs.harbor_project }}/${{ inputs.image_name }}"
+          helm upgrade --install "${{ inputs.release_name }}" "${{ inputs.helm_chart_path }}" \
+            --namespace "${{ inputs.k8s_namespace }}" --create-namespace \
+            --values "${{ inputs.helm_values_file }}" \
+            --set image.repository="${image_repository}" \
+            --set image.tag="${{ inputs.image_tag }}" \
+            --set image.digest="${{ inputs.image_digest }}" \
+            --set environment="${{ inputs.environment }}" \
+            --wait --timeout 10m
+      - name: Rollout status
+        run: kubectl rollout status deployment/${{ inputs.release_name }} -n "${{ inputs.k8s_namespace }}" --timeout=300s
+      - name: Health check
+        run: curl -fsS --retry 12 --retry-delay 10 "${{ inputs.health_check_url }}"

@@ -1,0 +1,196 @@
+name: dotnet DEV CI/CD orchestration
+
+on:
+  workflow_call:
+    inputs:
+      application_name: { required: true, type: string }
+      dotnet_solution: { required: true, type: string }
+      project_path: { required: true, type: string }
+      test_project_path: { required: true, type: string }
+      deployment_type: { required: true, type: string }
+      target_environment: { required: true, type: string }
+      sonar_project_key: { required: true, type: string }
+      graphnode_project_key: { required: true, type: string }
+      nexus_repository: { required: true, type: string }
+      harbor_project: { required: false, type: string, default: "" }
+      image_name: { required: false, type: string, default: "" }
+      k8s_namespace: { required: false, type: string, default: "" }
+      helm_chart_path: { required: false, type: string, default: "" }
+      helm_values_file: { required: false, type: string, default: "" }
+      iis_server_group: { required: false, type: string, default: "" }
+      iis_site_name: { required: false, type: string, default: "" }
+      iis_app_pool_name: { required: false, type: string, default: "" }
+      deploy_path: { required: false, type: string, default: "" }
+      health_check_url: { required: true, type: string }
+      graphnode_fail_on_high: { required: false, type: boolean, default: false }
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-dotnet-build.yaml
+    with:
+      dotnet_solution: ${{ inputs.dotnet_solution }}
+      project_path: ${{ inputs.project_path }}
+      test_project_path: ${{ inputs.test_project_path }}
+      configuration: Release
+      artifact_name: ${{ inputs.application_name }}-package
+      checkout_ref: DEV
+    secrets: inherit
+
+  sonar:
+    uses: ./.github/workflows/reusable-sonarqube-scan.yaml
+    needs: build
+    with:
+      project_key: ${{ inputs.sonar_project_key }}
+      branch_name: DEV
+      dotnet_solution: ${{ inputs.dotnet_solution }}
+      checkout_ref: DEV
+    secrets: inherit
+
+  graphnode:
+    uses: ./.github/workflows/reusable-graphnode-sast.yaml
+    needs: sonar
+    with:
+      project_key: ${{ inputs.graphnode_project_key }}
+      repository: ${{ github.repository }}
+      branch: DEV
+      environment: DEV
+      jira_issue_key: ""
+      fail_on_high: ${{ inputs.graphnode_fail_on_high }}
+      checkout_ref: DEV
+    secrets: inherit
+
+  nexus_publish:
+    uses: ./.github/workflows/reusable-nexus-publish.yaml
+    needs: graphnode
+    with:
+      application_name: ${{ inputs.application_name }}
+      environment: DEV
+      release_version: 0.0.0-dev
+      nexus_repository: ${{ inputs.nexus_repository }}
+      artifact_name: ${{ inputs.application_name }}-package
+    secrets: inherit
+
+  docker_build:
+    if: ${{ inputs.deployment_type == 'kubernetes' }}
+    uses: ./.github/workflows/reusable-docker-build.yaml
+    needs: graphnode
+    with:
+      application_name: ${{ inputs.application_name }}
+      environment: DEV
+      release_version: 0.0.0-dev
+      image_name: ${{ inputs.image_name }}
+      harbor_project: ${{ inputs.harbor_project }}
+      checkout_ref: DEV
+    secrets: inherit
+
+  twistlock:
+    if: ${{ inputs.deployment_type == 'kubernetes' }}
+    uses: ./.github/workflows/reusable-twistlock-scan.yaml
+    needs: docker_build
+    with:
+      image_reference: ${{ needs.docker_build.outputs.image_reference }}
+      image_tar_artifact: ${{ needs.docker_build.outputs.image_tar_artifact }}
+      environment: DEV
+      fail_on_high: true
+    secrets: inherit
+
+  harbor_push:
+    if: ${{ inputs.deployment_type == 'kubernetes' }}
+    uses: ./.github/workflows/reusable-harbor-push.yaml
+    needs: [docker_build, twistlock]
+    with:
+      image_reference: ${{ needs.docker_build.outputs.image_reference }}
+      image_tar_artifact: ${{ needs.docker_build.outputs.image_tar_artifact }}
+    secrets: inherit
+
+  k8s_deploy:
+    if: ${{ inputs.deployment_type == 'kubernetes' }}
+    uses: ./.github/workflows/reusable-k8s-deploy.yaml
+    needs: [harbor_push, nexus_publish]
+    with:
+      application_name: ${{ inputs.application_name }}
+      environment: DEV
+      image_name: ${{ inputs.image_name }}
+      image_tag: ${{ needs.harbor_push.outputs.image_tag }}
+      image_digest: ${{ needs.harbor_push.outputs.image_digest }}
+      harbor_project: ${{ inputs.harbor_project }}
+      k8s_namespace: ${{ inputs.k8s_namespace }}
+      helm_chart_path: ${{ inputs.helm_chart_path }}
+      helm_values_file: ${{ inputs.helm_values_file }}
+      release_name: ${{ inputs.application_name }}
+      health_check_url: ${{ inputs.health_check_url }}
+      rollback_enabled: true
+      checkout_ref: DEV
+    secrets: inherit
+
+  iis_deploy:
+    if: ${{ inputs.deployment_type == 'iis' }}
+    uses: ./.github/workflows/reusable-iis-deploy.yaml
+    needs: nexus_publish
+    with:
+      application_name: ${{ inputs.application_name }}
+      environment: DEV
+      artifact_version: ${{ needs.nexus_publish.outputs.artifact_version }}
+      nexus_artifact_url: ${{ needs.nexus_publish.outputs.artifact_url }}
+      iis_server_group: ${{ inputs.iis_server_group }}
+      iis_site_name: ${{ inputs.iis_site_name }}
+      iis_app_pool_name: ${{ inputs.iis_app_pool_name }}
+      deploy_path: ${{ inputs.deploy_path }}
+      health_check_url: ${{ inputs.health_check_url }}
+      rollback_enabled: true
+    secrets: inherit
+
+  publish_evidence_k8s:
+    if: ${{ inputs.deployment_type == 'kubernetes' }}
+    uses: ./.github/workflows/reusable-release-evidence-publish.yaml
+    needs: [sonar, graphnode, nexus_publish, docker_build, twistlock, harbor_push, k8s_deploy]
+    with:
+      application_name: ${{ inputs.application_name }}
+      release_version: 0.0.0-dev
+      environment: DEV
+      deployment_type: kubernetes
+      jira_issue_key: N/A
+      artifact_url: ${{ needs.nexus_publish.outputs.artifact_url }}
+      artifact_version: ${{ needs.nexus_publish.outputs.artifact_version }}
+      image_reference: ${{ needs.docker_build.outputs.image_reference }}
+      image_tag: ${{ needs.harbor_push.outputs.image_tag }}
+      image_digest: ${{ needs.harbor_push.outputs.image_digest }}
+      sonar_quality_gate: ${{ needs.sonar.outputs.quality_gate == 'OK' && 'PASSED' || needs.sonar.outputs.quality_gate }}
+      sonar_dashboard_url: ${{ needs.sonar.outputs.dashboard_url }}
+      graphnode_scan_id: ${{ needs.graphnode.outputs.scan_id }}
+      graphnode_report_url: ${{ needs.graphnode.outputs.report_url }}
+      graphnode_critical: ${{ needs.graphnode.outputs.critical }}
+      graphnode_high: ${{ needs.graphnode.outputs.high }}
+      graphnode_medium: ${{ needs.graphnode.outputs.medium }}
+      graphnode_low: ${{ needs.graphnode.outputs.low }}
+      twistlock_scan_id: ${{ needs.twistlock.outputs.scan_id }}
+      twistlock_report_url: ${{ needs.twistlock.outputs.report_url }}
+      twistlock_critical: ${{ needs.twistlock.outputs.critical }}
+      twistlock_high: ${{ needs.twistlock.outputs.high }}
+    secrets: inherit
+
+  publish_evidence_iis:
+    if: ${{ inputs.deployment_type == 'iis' }}
+    uses: ./.github/workflows/reusable-release-evidence-publish.yaml
+    needs: [sonar, graphnode, nexus_publish, iis_deploy]
+    with:
+      application_name: ${{ inputs.application_name }}
+      release_version: 0.0.0-dev
+      environment: DEV
+      deployment_type: iis
+      jira_issue_key: N/A
+      artifact_url: ${{ needs.nexus_publish.outputs.artifact_url }}
+      artifact_version: ${{ needs.nexus_publish.outputs.artifact_version }}
+      sonar_quality_gate: ${{ needs.sonar.outputs.quality_gate == 'OK' && 'PASSED' || needs.sonar.outputs.quality_gate }}
+      sonar_dashboard_url: ${{ needs.sonar.outputs.dashboard_url }}
+      graphnode_scan_id: ${{ needs.graphnode.outputs.scan_id }}
+      graphnode_report_url: ${{ needs.graphnode.outputs.report_url }}
+      graphnode_critical: ${{ needs.graphnode.outputs.critical }}
+      graphnode_high: ${{ needs.graphnode.outputs.high }}
+      graphnode_medium: ${{ needs.graphnode.outputs.medium }}
+      graphnode_low: ${{ needs.graphnode.outputs.low }}
+    secrets: inherit

@@ -1,0 +1,54 @@
+name: reusable twistlock scan
+
+on:
+  workflow_call:
+    inputs:
+      image_reference: { required: true, type: string }
+      image_tar_artifact: { required: true, type: string }
+      environment: { required: true, type: string }
+      fail_on_high: { required: false, type: boolean, default: true }
+      platform_repository: { required: false, type: string, default: bank-org/bank-devsecops-pipeline-platform }
+      platform_ref: { required: false, type: string, default: v1.0.0 }
+    outputs:
+      scan_id:
+        value: ${{ jobs.scan.outputs.scan_id }}
+      report_url:
+        value: ${{ jobs.scan.outputs.report_url }}
+      critical:
+        value: ${{ jobs.scan.outputs.critical }}
+      high:
+        value: ${{ jobs.scan.outputs.high }}
+    secrets:
+      TWISTLOCK_CONSOLE_URL: { required: true }
+      TWISTLOCK_USER: { required: true }
+      TWISTLOCK_PASSWORD: { required: true }
+
+jobs:
+  scan:
+    runs-on: self-hosted
+    outputs:
+      scan_id: ${{ steps.policy.outputs.scan_id }}
+      report_url: ${{ steps.policy.outputs.report_url }}
+      critical: ${{ steps.policy.outputs.critical }}
+      high: ${{ steps.policy.outputs.high }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.image_tar_artifact }}
+      - name: Load image
+        run: docker load -i image.tar
+      - name: Checkout pipeline platform actions
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: .pipeline-platform
+      - id: policy
+        uses: ./.pipeline-platform/actions/twistlock-policy-check
+        with:
+          console_url: ${{ secrets.TWISTLOCK_CONSOLE_URL }}
+          username: ${{ secrets.TWISTLOCK_USER }}
+          password: ${{ secrets.TWISTLOCK_PASSWORD }}
+          image_reference: ${{ inputs.image_reference }}
+          environment: ${{ inputs.environment }}
+          fail_on_high: ${{ inputs.fail_on_high }}

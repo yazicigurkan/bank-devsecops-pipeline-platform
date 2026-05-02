@@ -1,0 +1,33 @@
+name: reusable jira transition
+
+on:
+  workflow_call:
+    inputs:
+      jira_issue_key: { required: true, type: string }
+      transition_name: { required: true, type: string }
+      comment: { required: true, type: string }
+      platform_repository: { required: false, type: string, default: bank-org/bank-devsecops-pipeline-platform }
+      platform_ref: { required: false, type: string, default: v1.0.0 }
+    secrets:
+      JIRA_BASE_URL: { required: true }
+      JIRA_USER_EMAIL: { required: true }
+      JIRA_API_TOKEN: { required: true }
+
+jobs:
+  transition:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout pipeline scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: .pipeline-platform
+      - name: Add comment and transition
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          bash .pipeline-platform/scripts/jira/add-comment.sh "${JIRA_BASE_URL}" "${JIRA_USER_EMAIL}" "${JIRA_API_TOKEN}" "${{ inputs.jira_issue_key }}" "${{ inputs.comment }}"
+          bash .pipeline-platform/scripts/jira/transition-issue.sh "${JIRA_BASE_URL}" "${JIRA_USER_EMAIL}" "${JIRA_API_TOKEN}" "${{ inputs.jira_issue_key }}" "${{ inputs.transition_name }}"

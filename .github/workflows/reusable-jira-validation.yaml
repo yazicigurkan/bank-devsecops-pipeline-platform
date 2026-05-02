@@ -1,0 +1,54 @@
+name: reusable jira validation
+
+on:
+  workflow_call:
+    inputs:
+      jira_issue_key: { required: true, type: string }
+      target_environment: { required: true, type: string }
+      allowed_statuses: { required: true, type: string }
+      required_approvals: { required: true, type: string }
+      platform_repository: { required: false, type: string, default: bank-org/bank-devsecops-pipeline-platform }
+      platform_ref: { required: false, type: string, default: v1.0.0 }
+      manager_approval_field: { required: false, type: string, default: customfield_managerApproval }
+      security_approval_field: { required: false, type: string, default: customfield_securityApproval }
+      test_approval_field: { required: false, type: string, default: customfield_testApproval }
+      change_window_field: { required: false, type: string, default: customfield_changeWindow }
+      rollback_plan_field: { required: false, type: string, default: customfield_rollbackPlan }
+    outputs:
+      current_status:
+        value: ${{ jobs.validate.outputs.current_status }}
+      approved_by:
+        value: ${{ jobs.validate.outputs.approved_by }}
+    secrets:
+      JIRA_BASE_URL: { required: true }
+      JIRA_USER_EMAIL: { required: true }
+      JIRA_API_TOKEN: { required: true }
+
+jobs:
+  validate:
+    runs-on: self-hosted
+    outputs:
+      current_status: ${{ steps.check.outputs.current_status }}
+      approved_by: ${{ steps.check.outputs.approved_by }}
+    steps:
+      - name: Checkout pipeline platform actions
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: .pipeline-platform
+      - id: check
+        uses: ./.pipeline-platform/actions/jira-status-check
+        with:
+          base_url: ${{ secrets.JIRA_BASE_URL }}
+          user_email: ${{ secrets.JIRA_USER_EMAIL }}
+          api_token: ${{ secrets.JIRA_API_TOKEN }}
+          issue_key: ${{ inputs.jira_issue_key }}
+          target_environment: ${{ inputs.target_environment }}
+          allowed_statuses: ${{ inputs.allowed_statuses }}
+          required_approvals: ${{ inputs.required_approvals }}
+          manager_approval_field: ${{ inputs.manager_approval_field }}
+          security_approval_field: ${{ inputs.security_approval_field }}
+          test_approval_field: ${{ inputs.test_approval_field }}
+          change_window_field: ${{ inputs.change_window_field }}
+          rollback_plan_field: ${{ inputs.rollback_plan_field }}

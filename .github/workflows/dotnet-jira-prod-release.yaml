@@ -1,0 +1,119 @@
+name: dotnet Jira PROD release orchestration
+
+on:
+  workflow_call:
+    inputs:
+      jira_issue_key: { required: true, type: string }
+      application_name: { required: true, type: string }
+      repository_name: { required: true, type: string }
+      branch_name: { required: true, type: string }
+      release_version: { required: true, type: string }
+      deployment_type: { required: true, type: string }
+      target_environment: { required: true, type: string }
+      nexus_repository: { required: true, type: string }
+      harbor_project: { required: false, type: string, default: "" }
+      image_name: { required: false, type: string, default: "" }
+      k8s_namespace: { required: false, type: string, default: "" }
+      helm_chart_path: { required: false, type: string, default: "" }
+      helm_values_file: { required: false, type: string, default: "" }
+      iis_server_group: { required: false, type: string, default: "" }
+      iis_site_name: { required: false, type: string, default: "" }
+      iis_app_pool_name: { required: false, type: string, default: "" }
+      deploy_path: { required: false, type: string, default: "" }
+      health_check_url: { required: true, type: string }
+      rollback_enabled: { required: false, type: boolean, default: true }
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  input_guard:
+    runs-on: self-hosted
+    steps:
+      - name: Validate PROD release inputs
+        run: |
+          set -euo pipefail
+          [ "${{ inputs.branch_name }}" = "PROD" ]
+          [ "${{ inputs.target_environment }}" = "PROD" ]
+          case "${{ inputs.deployment_type }}" in
+            iis|kubernetes) ;;
+            *) echo "Unsupported deployment_type=${{ inputs.deployment_type }}" >&2; exit 1 ;;
+          esac
+
+  jira_validate:
+    uses: ./.github/workflows/reusable-jira-validation.yaml
+    needs: input_guard
+    with:
+      jira_issue_key: ${{ inputs.jira_issue_key }}
+      target_environment: PROD
+      allowed_statuses: "DevOps Deploy Bekliyor,DevOps Deployment Ready"
+      required_approvals: "manager,information-security,test-lead"
+    secrets: inherit
+
+  governance:
+    uses: ./.github/workflows/reusable-release-governance.yaml
+    needs: jira_validate
+    with:
+      application_name: ${{ inputs.application_name }}
+      release_version: ${{ inputs.release_version }}
+      deployment_type: ${{ inputs.deployment_type }}
+      jira_issue_key: ${{ inputs.jira_issue_key }}
+      require_test_evidence: true
+      require_change_window: true
+      require_rollback_plan: true
+    secrets: inherit
+
+  prod_gate:
+    needs: governance
+    runs-on: self-hosted
+    environment: PROD
+    steps:
+      - run: echo "GitHub Environment Protection Rules approved PROD deployment."
+
+  iis_deploy:
+    if: ${{ inputs.deployment_type == 'iis' }}
+    uses: ./.github/workflows/reusable-iis-deploy.yaml
+    needs: [prod_gate, governance]
+    with:
+      application_name: ${{ inputs.application_name }}
+      environment: PROD
+      artifact_version: ${{ inputs.release_version }}
+      nexus_artifact_url: ${{ needs.governance.outputs.artifact_url }}
+      iis_server_group: ${{ inputs.iis_server_group }}
+      iis_site_name: ${{ inputs.iis_site_name }}
+      iis_app_pool_name: ${{ inputs.iis_app_pool_name }}
+      deploy_path: ${{ inputs.deploy_path }}
+      health_check_url: ${{ inputs.health_check_url }}
+      rollback_enabled: ${{ inputs.rollback_enabled }}
+    secrets: inherit
+
+  k8s_deploy:
+    if: ${{ inputs.deployment_type == 'kubernetes' }}
+    uses: ./.github/workflows/reusable-k8s-deploy.yaml
+    needs: [prod_gate, governance]
+    with:
+      application_name: ${{ inputs.application_name }}
+      environment: PROD
+      image_name: ${{ inputs.image_name }}
+      image_tag: ${{ needs.governance.outputs.promoted_image_tag }}
+      image_digest: ${{ needs.governance.outputs.image_digest }}
+      harbor_project: ${{ inputs.harbor_project }}
+      k8s_namespace: ${{ inputs.k8s_namespace }}
+      helm_chart_path: ${{ inputs.helm_chart_path }}
+      helm_values_file: ${{ inputs.helm_values_file }}
+      release_name: ${{ inputs.application_name }}
+      health_check_url: ${{ inputs.health_check_url }}
+      rollback_enabled: ${{ inputs.rollback_enabled }}
+      checkout_ref: ${{ inputs.branch_name }}
+    secrets: inherit
+
+  jira_transition:
+    if: ${{ always() && !cancelled() && (needs.iis_deploy.result == 'success' || needs.k8s_deploy.result == 'success') }}
+    uses: ./.github/workflows/reusable-jira-transition.yaml
+    needs: [iis_deploy, k8s_deploy]
+    with:
+      jira_issue_key: ${{ inputs.jira_issue_key }}
+      transition_name: "PROD Deploy Tamamlandı"
+      comment: "PROD deploy completed for ${{ inputs.application_name }} ${{ inputs.release_version }}. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+    secrets: inherit

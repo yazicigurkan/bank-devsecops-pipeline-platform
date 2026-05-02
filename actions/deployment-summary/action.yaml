@@ -1,0 +1,42 @@
+name: Deployment Summary
+description: Creates release evidence JSON and GitHub step summary.
+inputs:
+  application_name: { required: true }
+  version: { required: true }
+  environment: { required: true }
+  jira_issue_key: { required: false, default: "" }
+  artifact_url: { required: false, default: "" }
+  image: { required: false, default: "" }
+  image_digest: { required: false, default: "" }
+  sonar_quality_gate: { required: false, default: "" }
+  graphnode_scan_id: { required: false, default: "" }
+  twistlock_scan_id: { required: false, default: "" }
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        jq -n \
+          --arg application "${{ inputs.application_name }}" \
+          --arg version "${{ inputs.version }}" \
+          --arg environment "${{ inputs.environment }}" \
+          --arg jiraIssueKey "${{ inputs.jira_issue_key }}" \
+          --arg artifactUrl "${{ inputs.artifact_url }}" \
+          --arg image "${{ inputs.image }}" \
+          --arg imageDigest "${{ inputs.image_digest }}" \
+          --arg sonarQualityGate "${{ inputs.sonar_quality_gate }}" \
+          --arg graphNodeScanId "${{ inputs.graphnode_scan_id }}" \
+          --arg twistlockScanId "${{ inputs.twistlock_scan_id }}" \
+          --arg createdAt "$(date -Iseconds)" \
+          '{application:$application, version:$version, environment:$environment, jiraIssueKey:$jiraIssueKey, artifactUrl:$artifactUrl, image:$image, imageDigest:$imageDigest, sonarQualityGate:$sonarQualityGate, graphNodeScanId:$graphNodeScanId, twistlockScanId:$twistlockScanId, createdAt:$createdAt}' \
+          > deployment-evidence.json
+        {
+          echo "## Deployment evidence"
+          echo "- Application: ${{ inputs.application_name }}"
+          echo "- Version: ${{ inputs.version }}"
+          echo "- Environment: ${{ inputs.environment }}"
+          echo "- Jira: ${{ inputs.jira_issue_key }}"
+          echo "- Artifact: ${{ inputs.artifact_url }}"
+          echo "- Image digest: ${{ inputs.image_digest }}"
+        } >> "$GITHUB_STEP_SUMMARY"

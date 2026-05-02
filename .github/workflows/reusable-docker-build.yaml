@@ -1,0 +1,55 @@
+name: reusable docker build
+
+on:
+  workflow_call:
+    inputs:
+      application_name: { required: true, type: string }
+      environment: { required: true, type: string }
+      release_version: { required: true, type: string }
+      image_name: { required: true, type: string }
+      harbor_project: { required: true, type: string }
+      dockerfile: { required: false, type: string, default: Dockerfile }
+      context: { required: false, type: string, default: "." }
+      checkout_ref: { required: false, type: string, default: "" }
+    outputs:
+      image_reference:
+        value: ${{ jobs.docker.outputs.image_reference }}
+      image_tag:
+        value: ${{ jobs.docker.outputs.image_tag }}
+      image_tar_artifact:
+        value: ${{ jobs.docker.outputs.image_tar_artifact }}
+    secrets:
+      HARBOR_REGISTRY: { required: true }
+
+jobs:
+  docker:
+    runs-on: self-hosted
+    outputs:
+      image_reference: ${{ steps.meta.outputs.image_reference }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_tar_artifact: ${{ steps.meta.outputs.image_tar_artifact }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref_name }}
+      - id: meta
+        env:
+          HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY }}
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          tag="${{ inputs.release_version }}-${{ inputs.environment }}-${short_sha}-${{ github.run_number }}"
+          image="${HARBOR_REGISTRY}/${{ inputs.harbor_project }}/${{ inputs.image_name }}:${tag}"
+          {
+            echo "image_tag=${tag}"
+            echo "image_reference=${image}"
+            echo "image_tar_artifact=${{ inputs.image_name }}-${tag}-tar"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build image
+        run: docker build -f "${{ inputs.dockerfile }}" -t "${{ steps.meta.outputs.image_reference }}" "${{ inputs.context }}"
+      - name: Save image for scan and push
+        run: docker save "${{ steps.meta.outputs.image_reference }}" -o image.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.image_tar_artifact }}
+          path: image.tar
+          retention-days: 7

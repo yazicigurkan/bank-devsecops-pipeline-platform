@@ -1,0 +1,35 @@
+name: reusable nexus artifact validation
+
+on:
+  workflow_call:
+    inputs:
+      artifact_url: { required: true, type: string }
+      expected_sha256: { required: false, type: string, default: "" }
+    outputs:
+      artifact_url:
+        value: ${{ jobs.validate.outputs.artifact_url }}
+    secrets:
+      NEXUS_USERNAME: { required: true }
+      NEXUS_PASSWORD: { required: true }
+
+jobs:
+  validate:
+    runs-on: self-hosted
+    outputs:
+      artifact_url: ${{ steps.meta.outputs.artifact_url }}
+    steps:
+      - id: meta
+        run: echo "artifact_url=${{ inputs.artifact_url }}" >> "$GITHUB_OUTPUT"
+      - name: Check artifact exists
+        env:
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: curl -fsSI -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" "${{ inputs.artifact_url }}"
+      - name: Optional checksum validation
+        if: ${{ inputs.expected_sha256 != '' }}
+        env:
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: |
+          curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" -o artifact.zip "${{ inputs.artifact_url }}"
+          echo "${{ inputs.expected_sha256 }}  artifact.zip" | sha256sum -c -

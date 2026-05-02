@@ -1,0 +1,51 @@
+name: Twistlock Policy Check
+description: Runs Twistlock scan and fails on critical/high findings according to policy.
+inputs:
+  console_url: { required: true }
+  username: { required: true }
+  password: { required: true }
+  image_reference: { required: true }
+  environment: { required: true }
+  fail_on_high: { required: false, default: "true" }
+outputs:
+  scan_id:
+    value: ${{ steps.scan.outputs.scan_id }}
+  report_url:
+    value: ${{ steps.scan.outputs.report_url }}
+  critical:
+    value: ${{ steps.scan.outputs.critical }}
+  high:
+    value: ${{ steps.scan.outputs.high }}
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      env:
+        TWISTLOCK_USER: ${{ inputs.username }}
+        TWISTLOCK_PASSWORD: ${{ inputs.password }}
+      run: |
+        set -euo pipefail
+        twistcli images scan \
+          --address "${{ inputs.console_url }}" \
+          --user "${TWISTLOCK_USER}" \
+          --password "${TWISTLOCK_PASSWORD}" \
+          --details \
+          --output-file twistlock-result.json \
+          "${{ inputs.image_reference }}"
+        critical=$(jq '[.results[].vulnerabilities[]? | select(.severity=="critical")] | length' twistlock-result.json)
+        high=$(jq '[.results[].vulnerabilities[]? | select(.severity=="high")] | length' twistlock-result.json)
+        scan_id=$(jq -r '.scanId // "twistlock-local-scan"' twistlock-result.json)
+        report_url="${{ inputs.console_url }}/monitor/vulnerabilities/images"
+        echo "scan_id=${scan_id}" >> "$GITHUB_OUTPUT"
+        echo "report_url=${report_url}" >> "$GITHUB_OUTPUT"
+        echo "critical=${critical}" >> "$GITHUB_OUTPUT"
+        echo "high=${high}" >> "$GITHUB_OUTPUT"
+        if [ "$critical" -gt 0 ]; then
+          echo "Twistlock critical vulnerabilities: ${critical}" >&2
+          exit 1
+        fi
+        if [ "$high" -gt 0 ] && [ "${{ inputs.fail_on_high }}" = "true" ]; then
+          echo "Twistlock high vulnerabilities: ${high}" >&2
+          exit 1
+        fi

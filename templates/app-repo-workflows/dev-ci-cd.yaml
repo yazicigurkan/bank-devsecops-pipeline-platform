@@ -1,0 +1,30 @@
+name: DEV CI/CD
+
+on:
+  push:
+    branches: [DEV]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  dev:
+    uses: bank-org/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.0
+    with:
+      application_name: CHANGE_ME
+      dotnet_solution: CHANGE_ME.sln
+      project_path: src/CHANGE_ME/CHANGE_ME.csproj
+      test_project_path: tests/CHANGE_ME.Tests/CHANGE_ME.Tests.csproj
+      deployment_type: kubernetes
+      target_environment: DEV
+      sonar_project_key: CHANGE_ME
+      graphnode_project_key: CHANGE_ME
+      nexus_repository: dotnet-snapshots
+      harbor_project: CHANGE_ME
+      image_name: CHANGE_ME
+      k8s_namespace: CHANGE_ME-dev
+      helm_chart_path: deploy/k8s/chart
+      helm_values_file: deploy/k8s/values-dev.yaml
+      health_check_url: https://CHANGE_ME.dev.bank.local/health
+    secrets: inherit

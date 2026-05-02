@@ -1,0 +1,51 @@
+name: reusable dotnet build
+
+on:
+  workflow_call:
+    inputs:
+      dotnet_solution: { required: true, type: string }
+      project_path: { required: true, type: string }
+      test_project_path: { required: true, type: string }
+      configuration: { required: false, type: string, default: Release }
+      artifact_name: { required: true, type: string }
+      checkout_ref: { required: false, type: string, default: "" }
+    outputs:
+      package_artifact_name:
+        value: ${{ jobs.build.outputs.package_artifact_name }}
+    secrets:
+      NUGET_USERNAME: { required: false }
+      NUGET_PASSWORD: { required: false }
+
+jobs:
+  build:
+    runs-on: self-hosted
+    outputs:
+      package_artifact_name: ${{ steps.meta.outputs.package_artifact_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.checkout_ref || github.ref_name }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore from Nexus NuGet proxy
+        env:
+          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
+          NUGET_PASSWORD: ${{ secrets.NUGET_PASSWORD }}
+        run: dotnet restore "${{ inputs.dotnet_solution }}" --configfile NuGet.config
+      - name: Unit test
+        run: dotnet test "${{ inputs.test_project_path }}" --configuration "${{ inputs.configuration }}" --no-restore --logger trx --results-directory TestResults
+      - name: Publish
+        run: dotnet publish "${{ inputs.project_path }}" --configuration "${{ inputs.configuration }}" --no-restore --output publish
+      - name: Package
+        run: |
+          set -euo pipefail
+          zip -r package.zip publish
+      - id: meta
+        run: echo "package_artifact_name=${{ inputs.artifact_name }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: package.zip
+          retention-days: 30

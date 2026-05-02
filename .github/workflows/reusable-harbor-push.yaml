@@ -1,0 +1,43 @@
+name: reusable harbor push
+
+on:
+  workflow_call:
+    inputs:
+      image_reference: { required: true, type: string }
+      image_tar_artifact: { required: true, type: string }
+    outputs:
+      image_tag:
+        value: ${{ jobs.push.outputs.image_tag }}
+      image_digest:
+        value: ${{ jobs.push.outputs.image_digest }}
+    secrets:
+      HARBOR_REGISTRY: { required: true }
+      HARBOR_USERNAME: { required: true }
+      HARBOR_PASSWORD: { required: true }
+
+jobs:
+  push:
+    runs-on: self-hosted
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_digest: ${{ steps.digest.outputs.image_digest }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.image_tar_artifact }}
+      - run: docker load -i image.tar
+      - name: Login
+        env:
+          HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY }}
+          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
+        run: echo "${HARBOR_PASSWORD}" | docker login "${HARBOR_REGISTRY}" -u "${HARBOR_USERNAME}" --password-stdin
+      - name: Push
+        run: docker push "${{ inputs.image_reference }}"
+      - id: meta
+        run: |
+          echo "image_tag=${{ inputs.image_reference }}" | awk -F: '{print "image_tag="$NF}' >> "$GITHUB_OUTPUT"
+      - id: digest
+        run: |
+          digest=$(docker buildx imagetools inspect "${{ inputs.image_reference }}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "image_digest=${digest}" >> "$GITHUB_OUTPUT"

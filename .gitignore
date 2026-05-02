@@ -1,0 +1,17 @@
+.DS_Store
+local-lab/
+*.log
+*.tmp
+*.zip
+*.tar
+TestResults/
+coverage/
+.pipeline-platform/
+deployment-evidence.json
+release-manifest.json
+graphnode-result.json
+twistlock-result.json
+jira-issue.json
+transitions.json
+jira-comment.json
+transition.json

@@ -1,0 +1,65 @@
+name: reusable sonarqube scan
+
+on:
+  workflow_call:
+    inputs:
+      project_key: { required: true, type: string }
+      branch_name: { required: true, type: string }
+      dotnet_solution: { required: true, type: string }
+      checkout_ref: { required: false, type: string, default: "" }
+    outputs:
+      quality_gate:
+        value: ${{ jobs.sonar.outputs.quality_gate }}
+      dashboard_url:
+        value: ${{ jobs.sonar.outputs.dashboard_url }}
+    secrets:
+      SONAR_HOST_URL: { required: true }
+      SONAR_TOKEN: { required: true }
+
+jobs:
+  sonar:
+    runs-on: self-hosted
+    outputs:
+      quality_gate: ${{ steps.gate.outputs.quality_gate }}
+      dashboard_url: ${{ steps.meta.outputs.dashboard_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.checkout_ref || github.ref_name }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install scanner
+        run: dotnet tool install --global dotnet-sonarscanner
+      - name: Begin analysis
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet sonarscanner begin \
+            /k:"${{ inputs.project_key }}" \
+            /d:sonar.host.url="${SONAR_HOST_URL}" \
+            /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.branch.name="${{ inputs.branch_name }}" \
+            /d:sonar.qualitygate.wait=true
+      - name: Build for analysis
+        run: dotnet build "${{ inputs.dotnet_solution }}" --configuration Release
+      - name: End analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
+      - id: gate
+        name: Validate Quality Gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          set -euo pipefail
+          status=$(curl -fsS -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${{ inputs.project_key }}&branch=${{ inputs.branch_name }}" | jq -r '.projectStatus.status')
+          echo "quality_gate=${status}" >> "$GITHUB_OUTPUT"
+          test "$status" = "OK"
+      - id: meta
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: echo "dashboard_url=${SONAR_HOST_URL}/dashboard?id=${{ inputs.project_key }}&branch=${{ inputs.branch_name }}" >> "$GITHUB_OUTPUT"
