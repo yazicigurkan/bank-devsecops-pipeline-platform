@@ -216,6 +216,7 @@ Bu repo kendi release lifecycle'ina sahip olmalidir:
 - Workflow kontrati: `docs/workflow-contract.md`
 - GitHub test plani: `docs/github-test-plan.md`
 - GitHub environments ve secrets: `docs/github-environments-and-secrets.md`
+- Proxmox community tooling lab: `docs/proxmox-community-tooling-lab.md`
 
 ## Uyum Notlari
 
