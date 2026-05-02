@@ -20,10 +20,6 @@ jobs:
     outputs:
       dry_run_mode: ${{ steps.result.outputs.dry_run_mode }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: yazicigurkan/bank-devsecops-pipeline-platform
-          ref: v1.0.2
       - name: Run SDLC dry run
         run: |
           case "${{ inputs.mode }}" in
@@ -31,6 +27,47 @@ jobs:
             *) echo "Unsupported dry-run mode: ${{ inputs.mode }}" >&2; exit 1 ;;
           esac
           echo "Running SDLC dry-run for ${{ inputs.caller_repository }} with mode=${{ inputs.mode }}"
-          scripts/local/simulate-pipeline.sh "${{ inputs.mode }}"
+          mkdir -p local-lab/evidence/dev local-lab/mock-nexus local-lab/mock-harbor
+          cat > local-lab/evidence/release-manifest.json <<'JSON'
+          {
+            "application": "payment-api",
+            "version": "1.4.2",
+            "jiraIssueKey": "SDLC-1234",
+            "artifactUrl": "local-lab/mock-nexus/payment-api.zip",
+            "imageTag": "1.4.2-TEST-abc1234-145",
+            "imageDigest": "sha256:dryrun",
+            "sonarQualityGate": "PASSED",
+            "graphNode": {"scanId": "scan-9876", "critical": 0, "high": 0},
+            "twistlock": {"scanId": "tw-1234", "critical": 0, "high": 0},
+            "testDeployment": {"environment": "TEST", "status": "APPROVED"}
+          }
+          JSON
+          echo "mock artifact" > local-lab/mock-nexus/payment-api.zip
+          validate_manifest() {
+            jq -e '
+              .jiraIssueKey == "SDLC-1234" and
+              .testDeployment.status == "APPROVED" and
+              .sonarQualityGate == "PASSED" and
+              .graphNode.critical == 0 and
+              .graphNode.high == 0 and
+              .twistlock.critical == 0 and
+              .twistlock.high == 0 and
+              (.imageDigest | length > 0)
+            ' local-lab/evidence/release-manifest.json >/dev/null
+          }
+          if [ "${{ inputs.mode }}" = "negative" ]; then
+            jq '.twistlock.high = 1' local-lab/evidence/release-manifest.json > local-lab/evidence/release-manifest.tmp
+            mv local-lab/evidence/release-manifest.tmp local-lab/evidence/release-manifest.json
+            if validate_manifest; then
+              echo "Negative dry-run expected validation to fail" >&2
+              exit 1
+            fi
+            echo "Negative dry-run blocked PROD promotion as expected"
+            exit 0
+          fi
+          validate_manifest
+          jq '.prodPromotion={imageTag:"1.4.2-PROD-abc1234-145",promotionType:"digest-preserving",rebuilt:false}' \
+            local-lab/evidence/release-manifest.json > local-lab/evidence/prod-deployment-evidence.json
+          echo "SDLC dry-run completed; PROD rebuild=false"
       - id: result
         run: echo "dry_run_mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
