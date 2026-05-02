@@ -214,6 +214,7 @@ Bu repo kendi release lifecycle'ina sahip olmalidir:
 - Audit modeli: `docs/audit-model.md`
 - Yeni uygulama onboarding: `docs/onboarding-new-application.md`
 - Workflow kontrati: `docs/workflow-contract.md`
+- GitHub test plani: `docs/github-test-plan.md`
 
 ## Uyum Notlari
 

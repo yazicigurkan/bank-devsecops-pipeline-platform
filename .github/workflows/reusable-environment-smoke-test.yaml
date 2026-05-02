@@ -1,0 +1,26 @@
+name: reusable environment smoke test
+
+on:
+  workflow_call:
+    inputs:
+      target_environment:
+        required: true
+        type: string
+      caller_repository:
+        required: true
+        type: string
+
+jobs:
+  environment_smoke:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_environment }}
+    steps:
+      - name: Validate environment routing
+        run: |
+          case "${{ inputs.target_environment }}" in
+            DEV|TEST|PROD) ;;
+            *) echo "Unsupported environment: ${{ inputs.target_environment }}" >&2; exit 1 ;;
+          esac
+          echo "Reusable environment smoke test succeeded"
+          echo "Caller repository: ${{ inputs.caller_repository }}"
+          echo "Target environment: ${{ inputs.target_environment }}"
