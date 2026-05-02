@@ -1,0 +1,23 @@
+name: reusable smoke test
+
+on:
+  workflow_call:
+    inputs:
+      caller_repository:
+        required: true
+        type: string
+    outputs:
+      smoke_message:
+        value: ${{ jobs.smoke.outputs.smoke_message }}
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    outputs:
+      smoke_message: ${{ steps.result.outputs.smoke_message }}
+    steps:
+      - id: result
+        run: |
+          message="Reusable workflow call succeeded from ${{ inputs.caller_repository }}"
+          echo "smoke_message=${message}" >> "$GITHUB_OUTPUT"
+          echo "$message"
