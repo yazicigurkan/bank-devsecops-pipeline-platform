@@ -215,6 +215,7 @@ Bu repo kendi release lifecycle'ina sahip olmalidir:
 - Yeni uygulama onboarding: `docs/onboarding-new-application.md`
 - Workflow kontrati: `docs/workflow-contract.md`
 - GitHub test plani: `docs/github-test-plan.md`
+- GitHub environments ve secrets: `docs/github-environments-and-secrets.md`
 
 ## Uyum Notlari
 
