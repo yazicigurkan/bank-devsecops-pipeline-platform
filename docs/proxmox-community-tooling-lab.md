@@ -27,6 +27,7 @@ The `security-tools` container also hosts:
 
 - GitHub Actions self-hosted runner for `yazicigurkan/banking-dotnet-payment-api`
 - k3s single-node Kubernetes lab cluster
+- Argo CD GitOps controller
 - GraphNode-compatible lab API on `http://192.168.18.54:8080`
 - `twistcli` shim that executes Trivy and emits Twistlock-like JSON
 
@@ -192,6 +193,51 @@ Environment namespaces:
 | DEV | `payment-dev` |
 | TEST | `payment-test` |
 | PROD | `payment-prod` |
+
+## Argo CD GitOps
+
+Argo CD runs in the `argocd` namespace on CT `114`.
+
+UI:
+
+```text
+https://192.168.18.54:30443
+```
+
+Admin password:
+
+```bash
+pct exec 114 -- cat /root/devsecops-secrets/argocd-admin-password
+```
+
+Repository access:
+
+- The application repository is private.
+- Argo CD uses a read-only GitHub deploy key named `argocd-payment-api-readonly`.
+- The private key is stored only as a Kubernetes repository secret in `argocd`.
+
+Applications:
+
+| Application | Branch | Values file | Namespace | Sync |
+| --- | --- | --- | --- | --- |
+| `payment-api-dev` | `DEV` | `deploy/k8s/values-dev.yaml` | `payment-dev` | automated |
+| `payment-api-test` | `TEST` | `deploy/k8s/values-test.yaml` | `payment-test` | automated |
+| `payment-api-prod` | `PROD` | `deploy/k8s/values-prod.yaml` | `payment-prod` | automated |
+
+Useful checks:
+
+```bash
+pct exec 114 -- kubectl -n argocd get applications
+pct exec 114 -- kubectl -n argocd describe application payment-api-dev
+pct exec 114 -- kubectl get pods -n payment-dev
+```
+
+GitOps behavior:
+
+1. Pipeline builds and scans the container image.
+2. Pipeline pushes the image to Harbor.
+3. Pipeline commits the new image tag/digest to the environment values file.
+4. Argo CD sees the branch change and syncs the Helm chart to the matching namespace.
 
 ## IIS Lab Status
 

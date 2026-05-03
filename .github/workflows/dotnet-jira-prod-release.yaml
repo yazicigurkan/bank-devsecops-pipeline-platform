@@ -11,6 +11,7 @@ on:
       deployment_type: { required: true, type: string }
       target_environment: { required: true, type: string }
       nexus_repository: { required: true, type: string }
+      harbor_registry: { required: false, type: string, default: "" }
       harbor_project: { required: false, type: string, default: "" }
       image_name: { required: false, type: string, default: "" }
       k8s_namespace: { required: false, type: string, default: "" }
@@ -23,7 +24,7 @@ on:
       health_check_url: { required: true, type: string }
       rollback_enabled: { required: false, type: boolean, default: true }
 permissions:
-  contents: read
+  contents: write
   id-token: write
   actions: read
 
@@ -42,7 +43,7 @@ jobs:
           esac
 
   jira_validate:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.11
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.12
     needs: input_guard
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}
@@ -52,7 +53,7 @@ jobs:
     secrets: inherit
 
   governance:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-governance.yaml@v1.0.11
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-governance.yaml@v1.0.12
     needs: jira_validate
     with:
       application_name: ${{ inputs.application_name }}
@@ -73,7 +74,7 @@ jobs:
 
   iis_deploy:
     if: ${{ inputs.deployment_type == 'iis' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.11
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.12
     needs: [prod_gate, governance]
     with:
       application_name: ${{ inputs.application_name }}
@@ -88,30 +89,25 @@ jobs:
       rollback_enabled: ${{ inputs.rollback_enabled }}
     secrets: inherit
 
-  k8s_deploy:
+  gitops_update:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-k8s-deploy.yaml@v1.0.11
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.12
     needs: [prod_gate, governance]
     with:
       application_name: ${{ inputs.application_name }}
       environment: PROD
-      image_name: ${{ inputs.image_name }}
+      target_branch: ${{ inputs.branch_name }}
+      values_file: ${{ inputs.helm_values_file }}
+      image_repository: ${{ format('{0}/{1}/{2}', inputs.harbor_registry, inputs.harbor_project, inputs.image_name) }}
       image_tag: ${{ needs.governance.outputs.promoted_image_tag }}
       image_digest: ${{ needs.governance.outputs.image_digest }}
-      harbor_project: ${{ inputs.harbor_project }}
-      k8s_namespace: ${{ inputs.k8s_namespace }}
-      helm_chart_path: ${{ inputs.helm_chart_path }}
-      helm_values_file: ${{ inputs.helm_values_file }}
-      release_name: ${{ inputs.application_name }}
-      health_check_url: ${{ inputs.health_check_url }}
-      rollback_enabled: ${{ inputs.rollback_enabled }}
-      checkout_ref: ${{ inputs.branch_name }}
+      argocd_application: ${{ format('{0}-prod', inputs.application_name) }}
     secrets: inherit
 
   jira_transition:
-    if: ${{ always() && !cancelled() && (needs.iis_deploy.result == 'success' || needs.k8s_deploy.result == 'success') }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.11
-    needs: [iis_deploy, k8s_deploy]
+    if: ${{ always() && !cancelled() && (needs.iis_deploy.result == 'success' || needs.gitops_update.result == 'success') }}
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.12
+    needs: [iis_deploy, gitops_update]
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}
       transition_name: "PROD Deploy Tamamlandı"

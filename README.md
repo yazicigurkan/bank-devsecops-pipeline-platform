@@ -7,7 +7,7 @@ Uygulama repository'leri pipeline logic kopyalamaz. Sadece bu repodaki tag'lenmi
 ```yaml
 jobs:
   dev:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.11
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.12
     with:
       application_name: payment-api
       deployment_type: kubernetes
@@ -21,7 +21,7 @@ Son basarili DEV run:
 
 - Application repo: `yazicigurkan/banking-dotnet-payment-api`
 - Branch: `DEV`
-- Platform tag: `v1.0.11`
+- Platform tag: `v1.0.12`
 - Run: `https://github.com/yazicigurkan/banking-dotnet-payment-api/actions/runs/25274845379`
 - Result: success
 
@@ -34,9 +34,10 @@ Gecen adimlar:
 5. Docker image build
 6. Twistlock policy check
 7. Harbor image push
-8. Kubernetes DEV deploy
-9. Health check
-10. Release evidence publish
+8. GitOps values update
+9. Argo CD auto-sync to Kubernetes
+10. Health/rollout validation through Argo CD
+11. Release evidence publish
 
 ## Lab Topology On Proxmox
 
@@ -121,7 +122,7 @@ pct exec 114 -- cat /root/devsecops-secrets/graphnode-token
 
 ## Kubernetes Environment
 
-Kubernetes lab ortami CT 114 uzerinde k3s olarak calisir.
+Kubernetes lab ortami CT 114 uzerinde k3s olarak calisir. Kubernetes deployment modeli GitOps'a tasindi: pipeline image'i build edip Harbor'a push eder, ilgili Helm values dosyasindaki image tag/digest'i Git'e commit eder, Argo CD de ilgili branch/path degisikligini otomatik sync eder.
 
 Kontrol:
 
@@ -139,10 +140,38 @@ Namespace ayrimi:
 | TEST | `payment-test` |
 | PROD | `payment-prod` |
 
-DEV pipeline son durumda `payment-dev` namespace'ine Helm ile deploy eder. `values-dev.yaml` NodePort kullanir ve health check runner icinden su endpoint'e gider:
+DEV pipeline artik dogrudan `helm upgrade` calistirmaz. Desired state `deploy/k8s/values-dev.yaml` dosyasina commit edilir; Argo CD `payment-api-dev` Application'i bu degisikligi `payment-dev` namespace'ine uygular. `values-dev.yaml` NodePort kullanir ve health check runner icinden su endpoint'e gider:
 
 ```text
 http://127.0.0.1:30080/health
+```
+
+Argo CD UI:
+
+```text
+https://192.168.18.54:30443
+```
+
+Admin parolasi CT 114 icinde tutulur:
+
+```bash
+pct exec 114 -- cat /root/devsecops-secrets/argocd-admin-password
+```
+
+Argo CD Applications:
+
+| Application | Branch | Chart path | Values file | Namespace | Sync |
+| --- | --- | --- | --- | --- | --- |
+| `payment-api-dev` | `DEV` | `deploy/k8s/chart` | `deploy/k8s/values-dev.yaml` | `payment-dev` | automated |
+| `payment-api-test` | `TEST` | `deploy/k8s/chart` | `deploy/k8s/values-test.yaml` | `payment-test` | automated |
+| `payment-api-prod` | `PROD` | `deploy/k8s/chart` | `deploy/k8s/values-prod.yaml` | `payment-prod` | automated |
+
+GitOps kontrol komutlari:
+
+```bash
+pct exec 114 -- kubectl -n argocd get applications
+pct exec 114 -- kubectl -n argocd describe application payment-api-dev
+pct exec 114 -- kubectl get pods -n payment-dev
 ```
 
 TEST ve PROD icin branch'ler olusturuldu:
@@ -217,6 +246,7 @@ bank-devsecops-pipeline-platform/
 │   ├── reusable-docker-build.yaml
 │   ├── reusable-twistlock-scan.yaml
 │   ├── reusable-harbor-push.yaml
+│   ├── reusable-argocd-gitops-update.yaml
 │   ├── reusable-iis-deploy.yaml
 │   ├── reusable-k8s-deploy.yaml
 │   ├── reusable-jira-validation.yaml
@@ -251,7 +281,7 @@ bank-devsecops-pipeline-platform/
 
 - `DEV` branch icin otomatik CI/CD orkestrasyonudur.
 - Build, SonarQube, GraphNode, Nexus publish ve secilen deployment tipini calistirir.
-- `deployment_type=kubernetes` ise Docker build, Twistlock scan, Harbor push, Helm deploy ve evidence publish yapar.
+- `deployment_type=kubernetes` ise Docker build, Twistlock scan, Harbor push, GitOps values update, Argo CD sync wait ve evidence publish yapar.
 - `deployment_type=iis` ise Nexus artifact uzerinden IIS deploy workflow'una gider.
 
 `dotnet-jira-test-release.yaml`
@@ -351,12 +381,19 @@ bank-devsecops-pipeline-platform/
 - Image'i Harbor'a push eder.
 - Image digest bilgisini toplar ve sonraki deploy/evidence adimlarina output verir.
 
+`reusable-argocd-gitops-update.yaml`
+
+- Kubernetes deployment icin GitOps desired state'i gunceller.
+- Ilgili environment branch'indeki Helm values dosyasinda `image.repository`, `image.tag` ve `image.digest` alanlarini degistirir.
+- Commit mesaji `[skip ci]` icerir; boylece GitOps commit'i yeni CI loop'u baslatmaz.
+- Argo CD Application'i hard refresh eder ve `Synced/Healthy` olana kadar bekler.
+- `KUBE_CONFIG` secret'i ile k3s/cluster'a baglanir.
+
 `reusable-k8s-deploy.yaml`
 
-- `KUBE_CONFIG` secret'ini kubeconfig olarak yazar.
-- Helm upgrade/install calistirir.
-- Namespace'i environment bazli kullanir.
-- Rollout status ve HTTP health check uygular.
+- Legacy/manual Helm deploy workflow'udur.
+- GitOps modunda ana orchestration workflow'lari bunu kullanmaz.
+- Acil durum veya GitOps disi lab testlerinde `KUBE_CONFIG` ile Helm upgrade/install calistirabilir.
 
 ### Reusable IIS Workflows
 
@@ -500,7 +537,7 @@ Uygulama reposunda minimum workflow bulunur:
 Uygulama workflow'u sadece platform workflow'unu tag ile cagirir:
 
 ```yaml
-uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.11
+uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.12
 ```
 
 `main` veya mutable branch referansi kullanilmaz.
@@ -521,6 +558,7 @@ uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev
 - SonarQube Community branch analysis desteklemedigi icin lab'da `sonar_branch_analysis_enabled=false` kullanilir.
 - GraphNode lab API, gercek urun yerine HTTP-compatible mock servisidir.
 - Twistlock lab entegrasyonu, `twistcli` isimli Trivy-backed shim ile yapilir.
+- Argo CD, private GitHub app repo'ya read-only deploy key ile erisir.
 - Gercek IIS deployment icin Windows Server VM henuz yoktur.
 - GitHub Actions loglarinda Node.js 20 deprecation uyarilari gorulebilir; mevcut run'i kirmiyor.
 

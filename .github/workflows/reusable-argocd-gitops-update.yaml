@@ -1,0 +1,99 @@
+name: reusable argocd gitops update
+
+on:
+  workflow_call:
+    inputs:
+      application_name: { required: true, type: string }
+      environment: { required: true, type: string }
+      target_branch: { required: true, type: string }
+      values_file: { required: true, type: string }
+      image_repository: { required: true, type: string }
+      image_tag: { required: true, type: string }
+      image_digest: { required: false, type: string, default: "" }
+      argocd_application: { required: true, type: string }
+      wait_for_argocd: { required: false, type: boolean, default: true }
+    secrets:
+      KUBE_CONFIG: { required: true }
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: [self-hosted, linux, k8s]
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+      - name: Update Helm values
+        run: |
+          set -euo pipefail
+          values_file="${{ inputs.values_file }}"
+          [ -f "$values_file" ] || { echo "Values file not found: $values_file" >&2; exit 1; }
+          tmp_file="$(mktemp)"
+          awk \
+            -v repo="${{ inputs.image_repository }}" \
+            -v tag="${{ inputs.image_tag }}" \
+            -v digest="${{ inputs.image_digest }}" '
+              BEGIN { in_image=0; saw_digest=0 }
+              /^image:[[:space:]]*$/ { in_image=1; saw_digest=0; print; next }
+              in_image && /^[^[:space:]]/ {
+                if (!saw_digest && digest != "") {
+                  print "  digest: " digest
+                }
+                in_image=0
+              }
+              in_image && /^[[:space:]]*repository:/ { print "  repository: " repo; next }
+              in_image && /^[[:space:]]*tag:/ { print "  tag: " tag; next }
+              in_image && /^[[:space:]]*digest:/ { print "  digest: " digest; saw_digest=1; next }
+              { print }
+              END {
+                if (in_image && !saw_digest && digest != "") {
+                  print "  digest: " digest
+                }
+              }
+            ' "$values_file" > "$tmp_file"
+          mv "$tmp_file" "$values_file"
+          git diff -- "$values_file"
+      - name: Commit desired state
+        run: |
+          set -euo pipefail
+          git config user.name "bank-devsecops-bot"
+          git config user.email "bank-devsecops-bot@users.noreply.github.com"
+          if git diff --quiet -- "${{ inputs.values_file }}"; then
+            echo "No GitOps values change is required."
+            exit 0
+          fi
+          git add "${{ inputs.values_file }}"
+          git commit -m "gitops: promote ${{ inputs.application_name }} ${{ inputs.environment }} ${{ inputs.image_tag }} [skip ci]"
+          git push origin "HEAD:${{ inputs.target_branch }}"
+      - name: Configure kubeconfig
+        if: ${{ inputs.wait_for_argocd }}
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.kube"
+          echo "${KUBE_CONFIG_B64}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Refresh and wait for Argo CD
+        if: ${{ inputs.wait_for_argocd }}
+        run: |
+          set -euo pipefail
+          app="${{ inputs.argocd_application }}"
+          kubectl -n argocd annotate application "$app" argocd.argoproj.io/refresh=hard --overwrite
+          for _ in $(seq 1 60); do
+            sync_status="$(kubectl -n argocd get application "$app" -o jsonpath='{.status.sync.status}' 2>/dev/null || true)"
+            health_status="$(kubectl -n argocd get application "$app" -o jsonpath='{.status.health.status}' 2>/dev/null || true)"
+            revision="$(kubectl -n argocd get application "$app" -o jsonpath='{.status.sync.revision}' 2>/dev/null || true)"
+            echo "Argo CD app=${app} sync=${sync_status:-unknown} health=${health_status:-unknown} revision=${revision:-unknown}"
+            if [ "$sync_status" = "Synced" ] && [ "$health_status" = "Healthy" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          kubectl -n argocd get application "$app" -o yaml
+          echo "Argo CD application did not become Synced and Healthy in time: $app" >&2
+          exit 1
