@@ -21,7 +21,7 @@ This lab provides self-hosted community/open-source equivalents for the bank Dev
 | 111 | nexus | 192.168.18.51 | Nexus Repository | http://192.168.18.51:8081 |
 | 112 | sonarqube | 192.168.18.52 | SonarQube | http://192.168.18.52:9000 |
 | 113 | harbor | 192.168.18.53 | Harbor + Trivy adapter | http://192.168.18.53 |
-| 114 | security-tools | 192.168.18.54 | Semgrep + Trivy CLI runners | CLI only |
+| 114 | security-tools | 192.168.18.54 | GitHub runner + k3s + GraphNode lab API + Trivy/Twistlock shim | http://192.168.18.54:8080 |
 
 The `security-tools` container also hosts:
 
@@ -51,39 +51,52 @@ vm.max_map_count=262144
 
 ## Initial Access
 
-Do not store generated passwords in Git.
+Do not store generated passwords in Git. The Proxmox host keeps a root-only access note for this lab:
+
+```bash
+cat /root/devsecops-lab-credentials/README.txt
+cat /root/devsecops-lab-credentials/ct-root-passwords.txt
+```
+
+Container login options:
+
+```bash
+pct enter 110
+ssh root@192.168.18.50
+```
 
 OpenProject:
 
 ```bash
-# Default first login is normally admin/admin, then force-change on first login.
-open http://192.168.18.50
+pct exec 110 -- cat /root/devsecops-secrets/openproject-admin-password
+pct exec 110 -- cat /root/devsecops-secrets/openproject-api-token
 ```
 
 Nexus:
 
 ```bash
-ssh root@192.168.18.2 "pct exec 111 -- docker exec nexus cat /nexus-data/admin.password"
+pct exec 111 -- cat /root/devsecops-secrets/nexus-admin-password
 ```
 
 SonarQube:
 
 ```bash
-# Default first login is admin/admin, then force-change on first login.
-open http://192.168.18.52:9000
+pct exec 112 -- cat /root/devsecops-secrets/sonar-admin-password
+pct exec 112 -- cat /root/devsecops-secrets/sonar-github-actions-token
 ```
 
 Harbor:
 
 ```bash
 # Username: admin
-ssh root@192.168.18.2 "pct exec 113 -- cat /root/harbor-admin-password.txt"
+pct exec 113 -- cat /root/harbor-admin-password.txt
 ```
 
 Security tools:
 
 ```bash
-ssh root@192.168.18.2 "pct exec 114 -- /opt/security-tools/run-smoke.sh"
+pct exec 114 -- cat /root/devsecops-secrets/graphnode-token
+pct exec 114 -- /opt/security-tools/run-smoke.sh
 ```
 
 ## Configured Lab Resources
@@ -132,8 +145,8 @@ Use these as GitHub Environment secrets or organization-level variables:
 | `SONAR_HOST_URL` | `http://192.168.18.52:9000` |
 | `HARBOR_REGISTRY` | `192.168.18.53` |
 | `HARBOR_PROJECT` | `payment` |
-| `TWISTLOCK_URL` | Replace with Trivy/Harbor scanner integration in lab |
-| `GRAPHNODE_URL` | Replace with Semgrep wrapper API, or run Semgrep CLI |
+| `TWISTLOCK_URL` | `http://192.168.18.54:8080` in lab |
+| `GRAPHNODE_URL` | `http://192.168.18.54:8080` |
 
 In this lab, set:
 
@@ -165,11 +178,32 @@ k3s runs inside CT `114`.
 ```bash
 ssh root@192.168.18.2 "pct exec 114 -- kubectl get nodes"
 ssh root@192.168.18.2 "pct exec 114 -- kubectl get pods -A"
+ssh root@192.168.18.2 "pct exec 114 -- kubectl get ns --show-labels | grep payment"
 ```
 
 The application repository stores `KUBE_CONFIG` as a base64-encoded GitHub secret. The lab kubeconfig points to `127.0.0.1:6443`, which is correct because deployment jobs run on the same self-hosted runner.
 
 Harbor is HTTP-only in the lab, so Docker and k3s containerd are configured with `192.168.18.53` as an insecure registry. Production must use TLS.
+
+Environment namespaces:
+
+| Environment | Namespace |
+| --- | --- |
+| DEV | `payment-dev` |
+| TEST | `payment-test` |
+| PROD | `payment-prod` |
+
+## IIS Lab Status
+
+There is no Windows Server/IIS VM in the current Proxmox inventory and no Windows Server ISO under `/var/lib/vz/template/iso`.
+
+To enable IIS deployment tests:
+
+1. Upload a Windows Server ISO to `/var/lib/vz/template/iso`.
+2. Create a Windows VM.
+3. Install IIS and enable PowerShell remoting.
+4. Install a GitHub self-hosted runner with labels `self-hosted`, `windows`, `iis`.
+5. Set `WINDOWS_DEPLOY_USERNAME` and `WINDOWS_DEPLOY_PASSWORD` as GitHub Environment secrets.
 
 ## Next Configuration Tasks
 

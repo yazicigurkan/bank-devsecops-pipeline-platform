@@ -1,13 +1,13 @@
 # Bank DevSecOps Pipeline Platform
 
-Bankacilik ortaminda Jira kontrollu, audit edilebilir ve reusable GitHub Actions tabanli SDLC pipeline platformu.
+Merkezi, reusable, GitHub Actions tabanli DevSecOps pipeline platformu. Bu repo bankacilik ortami icin yetki ayrimi, onay mekanizmasi, audit trail, guvenlik kontrolleri, artifact promotion ve Jira/OpenProject kontrollu SDLC akislarini standartlastirir.
 
-Bu repo pipeline logic'in merkezi sahibidir. Uygulama repository'leri kendi pipeline'larini kopyalamaz; sadece bu repodaki tag'lenmis reusable workflow'lari cagirir.
+Uygulama repository'leri pipeline logic kopyalamaz. Sadece bu repodaki tag'lenmis reusable workflow'lari cagirir.
 
 ```yaml
 jobs:
   dev:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.0
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.11
     with:
       application_name: payment-api
       deployment_type: kubernetes
@@ -15,16 +15,190 @@ jobs:
     secrets: inherit
 ```
 
-## Ana Prensipler
+## Current Lab Status
 
-- `DEV` otomatik deploy edilebilir, ama kalite ve guvenlik kontrolleri zorunludur.
-- `TEST` ve `PROD` Jira SDLC talebi olmadan deploy edilemez.
-- `PROD` ortaminda rebuild alinmaz; TEST'te onaylanan artifact veya image promote edilir.
-- SonarQube, GraphNode, Twistlock, Nexus ve Harbor sonuclari release evidence'a baglanir.
-- Uygulama repo'larinda karmasik pipeline logic tutulmaz.
-- Workflow'lar `main` uzerinden degil, platform release tag'i ile cagrilir.
+Son basarili DEV run:
 
-## Repository Yapisi
+- Application repo: `yazicigurkan/banking-dotnet-payment-api`
+- Branch: `DEV`
+- Platform tag: `v1.0.11`
+- Run: `https://github.com/yazicigurkan/banking-dotnet-payment-api/actions/runs/25274845379`
+- Result: success
+
+Gecen adimlar:
+
+1. .NET restore, test, publish, package
+2. SonarQube analysis ve Quality Gate
+3. GraphNode incremental SAST
+4. Nexus artifact publish
+5. Docker image build
+6. Twistlock policy check
+7. Harbor image push
+8. Kubernetes DEV deploy
+9. Health check
+10. Release evidence publish
+
+## Lab Topology On Proxmox
+
+Proxmox UI:
+
+```text
+https://192.168.18.2:8006
+```
+
+Mevcut LXC makineleri:
+
+| VMID | Name | IP | Role | URL |
+| --- | --- | --- | --- | --- |
+| 110 | openproject | `192.168.18.50` | Jira yerine SDLC/change management lab tool | `http://192.168.18.50` |
+| 111 | nexus | `192.168.18.51` | NuGet proxy, artifact repository, release evidence | `http://192.168.18.51:8081` |
+| 112 | sonarqube | `192.168.18.52` | Code quality ve Quality Gate | `http://192.168.18.52:9000` |
+| 113 | harbor | `192.168.18.53` | Container image registry | `http://192.168.18.53` |
+| 114 | security-tools | `192.168.18.54` | GitHub runner, k3s, GraphNode lab API, Trivy/Twistlock shim | `http://192.168.18.54:8080` |
+
+## Login To Lab Machines
+
+Proxmox host'a girdikten sonra container'a parolasiz girmek icin:
+
+```bash
+pct enter 110
+pct enter 111
+pct enter 112
+pct enter 113
+pct enter 114
+```
+
+Dogudan SSH ile girmek icin:
+
+```bash
+ssh root@192.168.18.50
+ssh root@192.168.18.51
+ssh root@192.168.18.52
+ssh root@192.168.18.53
+ssh root@192.168.18.54
+```
+
+Container root parolalari Proxmox host uzerinde root-only dosyada tutulur:
+
+```bash
+cat /root/devsecops-lab-credentials/ct-root-passwords.txt
+```
+
+Lab erisim ozet dosyasi:
+
+```bash
+cat /root/devsecops-lab-credentials/README.txt
+```
+
+Parolalari GitHub'a, README'ye veya pipeline loglarina yazmayin.
+
+## Product Credentials
+
+Urun parolalari ilgili LXC icinde dosya olarak tutulur. Proxmox host uzerinden okumak icin:
+
+```bash
+# OpenProject admin password
+pct exec 110 -- cat /root/devsecops-secrets/openproject-admin-password
+
+# OpenProject API token
+pct exec 110 -- cat /root/devsecops-secrets/openproject-api-token
+
+# Nexus admin password
+pct exec 111 -- cat /root/devsecops-secrets/nexus-admin-password
+
+# SonarQube admin password
+pct exec 112 -- cat /root/devsecops-secrets/sonar-admin-password
+
+# SonarQube GitHub Actions token
+pct exec 112 -- cat /root/devsecops-secrets/sonar-github-actions-token
+
+# Harbor admin password
+pct exec 113 -- cat /root/harbor-admin-password.txt
+
+# GraphNode lab API token
+pct exec 114 -- cat /root/devsecops-secrets/graphnode-token
+```
+
+## Kubernetes Environment
+
+Kubernetes lab ortami CT 114 uzerinde k3s olarak calisir.
+
+Kontrol:
+
+```bash
+pct exec 114 -- kubectl get nodes -o wide
+pct exec 114 -- kubectl get ns --show-labels | grep payment
+pct exec 114 -- kubectl get pods -A -o wide
+```
+
+Namespace ayrimi:
+
+| Environment | Namespace |
+| --- | --- |
+| DEV | `payment-dev` |
+| TEST | `payment-test` |
+| PROD | `payment-prod` |
+
+DEV pipeline son durumda `payment-dev` namespace'ine Helm ile deploy eder. `values-dev.yaml` NodePort kullanir ve health check runner icinden su endpoint'e gider:
+
+```text
+http://127.0.0.1:30080/health
+```
+
+TEST ve PROD icin branch'ler olusturuldu:
+
+```text
+DEV
+TEST
+PROD
+```
+
+## IIS Environment
+
+Su anda Proxmox uzerinde Windows Server/IIS VM yoktur. Proxmox ISO dizininde Windows Server ISO da bulunmuyor. Gercek IIS deployment icin Windows Server VM gerekir.
+
+IIS hedefini hazirlamak icin gerekli adimlar:
+
+1. Windows Server ISO'yu Proxmox'a yukle:
+
+   ```text
+   /var/lib/vz/template/iso
+   ```
+
+2. Windows VM olustur.
+3. IIS role'lerini kur:
+
+   ```powershell
+   Install-WindowsFeature Web-Server, Web-Mgmt-Service, Web-Asp-Net45 -IncludeManagementTools
+   ```
+
+4. PowerShell remoting ac:
+
+   ```powershell
+   Enable-PSRemoting -Force
+   Set-Item WSMan:\localhost\Service\AllowUnencrypted $true
+   Set-Item WSMan:\localhost\Service\Auth\Basic $true
+   ```
+
+5. GitHub self-hosted runner kur ve su label'lari ver:
+
+   ```text
+   self-hosted
+   windows
+   iis
+   ```
+
+6. GitHub Environment secrets olarak `WINDOWS_DEPLOY_USERNAME` ve `WINDOWS_DEPLOY_PASSWORD` tanimla.
+
+`reusable-iis-deploy.yaml` Windows runner uzerinde calisir:
+
+```yaml
+runs-on: [self-hosted, windows, iis]
+```
+
+Bu nedenle Linux LXC uzerinde gercek IIS deploy testi yapilmaz.
+
+## Repository Structure
 
 ```text
 bank-devsecops-pipeline-platform/
@@ -37,6 +211,7 @@ bank-devsecops-pipeline-platform/
 │   ├── reusable-graphnode-sast.yaml
 │   ├── reusable-graphnode-full-scan.yaml
 │   ├── reusable-nexus-publish.yaml
+│   ├── reusable-nexus-artifact-validation.yaml
 │   ├── reusable-release-evidence-publish.yaml
 │   ├── reusable-release-governance.yaml
 │   ├── reusable-docker-build.yaml
@@ -45,7 +220,11 @@ bank-devsecops-pipeline-platform/
 │   ├── reusable-iis-deploy.yaml
 │   ├── reusable-k8s-deploy.yaml
 │   ├── reusable-jira-validation.yaml
-│   └── reusable-jira-transition.yaml
+│   ├── reusable-jira-transition.yaml
+│   ├── reusable-smoke-test.yaml
+│   ├── reusable-environment-smoke-test.yaml
+│   ├── reusable-sdlc-dry-run.yaml
+│   └── platform-validation.yaml
 ├── actions/
 │   ├── graphnode-scan/
 │   ├── jira-status-check/
@@ -64,65 +243,188 @@ bank-devsecops-pipeline-platform/
 └── docs/
 ```
 
-## SDLC Akislari
+## Workflow Catalog
 
-### DEV
+### Orchestration Workflows
 
-`DEV` branch'e push/merge sonrasi otomatik calisir:
+`dotnet-dev-ci-cd.yaml`
 
-1. Checkout `DEV`
-2. .NET restore, test, publish
-3. SonarQube Quality Gate
-4. GraphNode incremental SAST
-5. Nexus artifact publish
-6. Deployment tipi `kubernetes` ise Docker build, Twistlock, Harbor push, Helm deploy
-7. Deployment tipi `iis` ise Nexus artifact ile IIS deploy
-8. DEV release evidence publish
+- `DEV` branch icin otomatik CI/CD orkestrasyonudur.
+- Build, SonarQube, GraphNode, Nexus publish ve secilen deployment tipini calistirir.
+- `deployment_type=kubernetes` ise Docker build, Twistlock scan, Harbor push, Helm deploy ve evidence publish yapar.
+- `deployment_type=iis` ise Nexus artifact uzerinden IIS deploy workflow'una gider.
 
-### TEST
+`dotnet-jira-test-release.yaml`
 
-Jira SDLC talebi veya API trigger ile calisir:
+- TEST deploy'u sadece Jira/OpenProject SDLC talebiyle calistirmak icin tasarlanmistir.
+- `branch_name=TEST` ve `target_environment=TEST` input guard uygular.
+- Jira status ve approval dogrulamasi yapar.
+- TEST ortaminda build/release candidate uretir, Nexus'a publish eder, secilen hedefe deploy eder.
+- Basarili deployment sonrasi Jira transition olarak `Test Ortam Kontrolleri` uygular.
 
-1. Input guard: `branch_name=TEST`, `target_environment=TEST`
-2. Jira status ve approval validation
-3. Checkout `TEST`
-4. SonarQube, GraphNode, build/package
-5. Nexus publish
-6. IIS veya Kubernetes deploy
-7. Release manifest olustur ve Nexus `release-evidence` repository'sine publish et
-8. Jira transition: `Test Ortam Kontrolleri`
+`dotnet-jira-prod-release.yaml`
 
-### PROD
+- PROD deploy icin en siki kontrollu akistir.
+- `branch_name=PROD` ve `target_environment=PROD` input guard uygular.
+- Jira status, manager, security ve test approval dogrular.
+- Release governance ile TEST evidence manifest'ini kontrol eder.
+- GitHub `PROD` Environment approval bekler.
+- PROD'da rebuild almaz; onayli artifact/image'i promote eder.
 
-Sadece onayli release promote eder:
+### Reusable Build And Quality Workflows
 
-1. Input guard: `branch_name=PROD`, `target_environment=PROD`
-2. Jira status, manager, test ve bilgi guvenligi onaylarini dogrula
-3. Change window ve rollback plan alanlarini dogrula
-4. Nexus'taki TEST release manifest'i indir ve security evidence'i dogrula
-5. GitHub `PROD` Environment Protection approval bekle
-6. Rebuild almadan Nexus artifact veya Harbor image digest ile deploy et
-7. Jira transition: `PROD Deploy Tamamlandı`
+`reusable-dotnet-build.yaml`
 
-## Zorunlu Secrets
+- Checkout, `dotnet restore`, unit test, `dotnet publish` ve zip package uretir.
+- NuGet restore, uygulama reposundaki `NuGet.config` uzerinden Nexus proxy'ye gider.
+- Artifact'i GitHub Actions artifact olarak sonraki job'lara aktarir.
 
-Secrets environment seviyesinde ayrilmalidir: `DEV`, `TEST`, `PROD`.
+`reusable-sonarqube-scan.yaml`
 
-| Secret | Kullanim |
+- Sonar scanner'i Nexus NuGet proxy uzerinden kurar.
+- `sonar.qualitygate.wait=true` ile Quality Gate sonucunu bekler.
+- Quality Gate `OK` degilse pipeline durur.
+- Lab SonarQube Community icin `branch_analysis_enabled=false` destekler.
+
+`reusable-graphnode-sast.yaml`
+
+- Incremental GraphNode SAST scan yapar.
+- Son commit ve onceki commit bilgisini GraphNode API'ye gonderir.
+- Critical bulgu varsa durur.
+- High bulguda davranis `fail_on_high` ile kontrol edilir.
+
+`reusable-graphnode-full-scan.yaml`
+
+- Yeni proje onboarding icin full scan calistirir.
+- GraphNode endpoint'i `full-scan` olarak kullanilir.
+
+### Reusable Artifact And Evidence Workflows
+
+`reusable-nexus-publish.yaml`
+
+- Build artifact'ini GitHub artifact'tan indirir.
+- Branch/environment/run number/commit SHA uyumlu versiyon uretir.
+- Nexus raw repository'ye artifact upload eder.
+
+`reusable-nexus-artifact-validation.yaml`
+
+- PROD promotion oncesi Nexus artifact URL'inin erisilebilir oldugunu dogrular.
+- PROD'da rebuild yerine onayli artifact'in kullanilmasini destekler.
+
+`reusable-release-evidence-publish.yaml`
+
+- Release manifest JSON olusturur.
+- Sonar, GraphNode, Twistlock, Nexus, Harbor ve Jira bilgilerini evidence'a baglar.
+- Manifest'i Nexus `release-evidence` repository'sine publish eder.
+
+`reusable-release-governance.yaml`
+
+- PROD deploy oncesi TEST release manifest'ini indirir.
+- Sonar Quality Gate, GraphNode critical/high, Twistlock critical/high, TEST approval ve rollback plan kontrollerini uygular.
+- PROD'da rebuild alinmasini engelleyen promotion modelinin merkezidir.
+
+### Reusable Container Workflows
+
+`reusable-docker-build.yaml`
+
+- Docker image tag uretir.
+- Tag formati:
+
+  ```text
+  <release_version>-<environment>-<short_sha>-<run_number>
+  ```
+
+- Image'i local Docker daemon'da build eder.
+- Image tar dosyasini scan/push job'lari icin Actions artifact olarak saklar.
+
+`reusable-twistlock-scan.yaml`
+
+- Image tar artifact'ini indirir ve local Docker'a load eder.
+- `twistlock-policy-check` composite action'ini calistirir.
+- Lab ortaminda `twistcli` komutu Trivy-backed shim olarak calisir.
+- Critical/high vulnerability policy'ye gore pipeline'i durdurur.
+
+`reusable-harbor-push.yaml`
+
+- Image artifact'ini indirir, Docker'a load eder.
+- Harbor login yapar.
+- Image'i Harbor'a push eder.
+- Image digest bilgisini toplar ve sonraki deploy/evidence adimlarina output verir.
+
+`reusable-k8s-deploy.yaml`
+
+- `KUBE_CONFIG` secret'ini kubeconfig olarak yazar.
+- Helm upgrade/install calistirir.
+- Namespace'i environment bazli kullanir.
+- Rollout status ve HTTP health check uygular.
+
+### Reusable IIS Workflows
+
+`reusable-iis-deploy.yaml`
+
+- Windows self-hosted runner gerektirir.
+- Nexus artifact indirir.
+- IIS app pool stop/start, backup, config transform, deploy ve health check script'lerini calistirir.
+- Hedef runner label'lari: `self-hosted`, `windows`, `iis`.
+
+### Reusable Jira/OpenProject Workflows
+
+`reusable-jira-validation.yaml`
+
+- Issue status dogrular.
+- Manager, information-security, test-lead approval alanlarini kontrol eder.
+- PROD icin change window ve rollback plan alanlarini zorunlu kilar.
+
+`reusable-jira-transition.yaml`
+
+- Issue'a deployment comment ekler.
+- Belirtilen transition adina gore issue status degistirir.
+
+### Utility Workflows
+
+`platform-validation.yaml`
+
+- Platform repo PR/push kontroludur.
+- YAML parse, shell syntax ve actionlint benzeri statik validasyonlari calistirmak icin kullanilir.
+
+`reusable-smoke-test.yaml`
+
+- Basit reusable workflow cagri testi icindir.
+
+`reusable-environment-smoke-test.yaml`
+
+- Environment secret/readiness testleri icindir.
+
+`reusable-sdlc-dry-run.yaml`
+
+- Gercek tool endpointlerine gitmeden SDLC evidence/governance davranisini simule eder.
+
+## Required GitHub Secrets
+
+Secrets repo seviyesinde degil, mumkunse GitHub Environment seviyesinde ayrilmalidir: `DEV`, `TEST`, `PROD`.
+
+| Secret | Purpose |
 | --- | --- |
 | `NUGET_USERNAME`, `NUGET_PASSWORD` | Nexus NuGet proxy restore |
 | `SONAR_HOST_URL`, `SONAR_TOKEN` | SonarQube analysis ve Quality Gate |
 | `GRAPHNODE_BASE_URL`, `GRAPHNODE_TOKEN` | GraphNode SAST |
 | `NEXUS_BASE_URL`, `NEXUS_USERNAME`, `NEXUS_PASSWORD` | Artifact ve release evidence |
-| `HARBOR_REGISTRY`, `HARBOR_USERNAME`, `HARBOR_PASSWORD` | Container image push |
-| `TWISTLOCK_CONSOLE_URL`, `TWISTLOCK_USER`, `TWISTLOCK_PASSWORD` | Image vulnerability scan |
-| `JIRA_BASE_URL`, `JIRA_USER_EMAIL`, `JIRA_API_TOKEN` | Jira validation, comment, transition |
+| `HARBOR_REGISTRY`, `HARBOR_USERNAME`, `HARBOR_PASSWORD` | Harbor login/push |
+| `TWISTLOCK_CONSOLE_URL`, `TWISTLOCK_USER`, `TWISTLOCK_PASSWORD` | Image scan |
+| `JIRA_BASE_URL`, `JIRA_USER_EMAIL`, `JIRA_API_TOKEN` | Jira/OpenProject validation ve transition |
 | `KUBE_CONFIG` | Kubernetes deploy |
-| `WINDOWS_DEPLOY_USERNAME`, `WINDOWS_DEPLOY_PASSWORD` | IIS PowerShell remoting |
+| `WINDOWS_DEPLOY_USERNAME`, `WINDOWS_DEPLOY_PASSWORD` | IIS deploy |
 
-## Jira Field Mapping
+Lab icin `HARBOR_REGISTRY` secret olarak durur, ama workflow output masking sorununu engellemek icin application workflow input'u olarak public registry host da verilir:
 
-`reusable-jira-validation.yaml` varsayilan olarak su field adlarini bekler:
+```yaml
+with:
+  harbor_registry: 192.168.18.53
+```
+
+## Jira/OpenProject Field Mapping
+
+Varsayilan field adlari:
 
 - `customfield_managerApproval`
 - `customfield_securityApproval`
@@ -130,7 +432,7 @@ Secrets environment seviyesinde ayrilmalidir: `DEV`, `TEST`, `PROD`.
 - `customfield_changeWindow`
 - `customfield_rollbackPlan`
 
-Gercek Jira instance'inda bu alanlar farkliysa workflow input'u ile override edilmelidir:
+Gercek Jira'da field id'leri farkliysa input ile override edilmelidir:
 
 ```yaml
 with:
@@ -141,87 +443,96 @@ with:
   rollback_plan_field: customfield_10104
 ```
 
-PROD icin change window alani `2026-05-02T21:00:00+03:00/2026-05-02T23:00:00+03:00` formatinda verilirse pipeline mevcut zamanin pencere icinde oldugunu dogrular.
+## Release And Promotion Rules
 
-## Release Evidence
+- DEV ortaminda build alinabilir.
+- TEST ortaminda release candidate uretilebilir.
+- PROD ortaminda rebuild alinmaz.
+- PROD sadece TEST'te onaylanmis artifact veya image'i promote eder.
+- Nexus artifact ve Harbor image immutable kabul edilmelidir.
+- Release manifest olmadan PROD deploy yapilmaz.
 
-TEST deploy sonrasi `reusable-release-evidence-publish.yaml` asagidaki manifest'i Nexus'a yazar:
+Release manifest lokasyonu:
 
 ```text
 ${NEXUS_BASE_URL}/repository/release-evidence/<application>/<version>/release-manifest.json
 ```
 
-Manifest minimum su bilgileri tasir:
+## Validation Commands
 
-- application, version, commit SHA
-- artifact URL ve artifact version
-- image tag ve image digest
-- SonarQube Quality Gate
-- GraphNode scan id, severity counts, report URL
-- Twistlock scan id, severity counts, report URL
-- Jira issue key ve approver bilgileri
-- TEST deployment approval status
-- rollback plan
-
-PROD workflow'u bu manifest'i dogrulamadan deploy etmez.
-
-## Local Dry-Run
-
-Gercek Jira/Nexus/Harbor/Sonar/GraphNode endpointleri olmadan governance davranisini test etmek icin:
+Local workflow lint:
 
 ```bash
-cd /Users/gurkanyazici/Desktop/TTB
-bank-devsecops-pipeline-platform/scripts/local/simulate-pipeline.sh all
-bank-devsecops-pipeline-platform/scripts/local/simulate-pipeline.sh negative
+cd /Users/gurkanyazici/Desktop/TTB/bank-devsecops-pipeline-platform
+actionlint .github/workflows/*.yaml
 ```
 
-`all` pozitif DEV -> TEST -> PROD promotion akisini simule eder.  
-`negative` release manifest icine yuksek seviye Twistlock bulgusu yazar ve PROD promotion'in bloklandigini dogrular.
-
-Dry-run ciktisi `local-lab/` altinda uretilir ve git'e alinmaz.
-
-## Validasyon
-
-Yerel statik kontroller:
+Shell syntax:
 
 ```bash
-ruby -e 'require "yaml"; files = Dir["bank-devsecops-pipeline-platform/.github/workflows/*.{yaml,yml}"] + Dir["bank-devsecops-pipeline-platform/actions/*/action.yaml"]; files.each { |f| YAML.load_file(f) }; puts "YAML OK"'
-find bank-devsecops-pipeline-platform/scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
+find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
 ```
 
-Gercek runner validasyonu icin onerilen ek kontrol:
+Dry-run:
 
 ```bash
-actionlint bank-devsecops-pipeline-platform/.github/workflows/*.yaml
+scripts/local/simulate-pipeline.sh all
+scripts/local/simulate-pipeline.sh negative
 ```
 
-## Platform Release Yonetimi
+Kubernetes smoke:
 
-Bu repo kendi release lifecycle'ina sahip olmalidir:
+```bash
+pct exec 114 -- kubectl get pods -n payment-dev
+curl -fsS http://127.0.0.1:30080/health
+```
 
-1. Platform degisikligi PR ile gelir.
-2. Workflow syntax, dry-run ve entegrasyon testleri calisir.
-3. DevOps platform owner approval verir.
-4. Release tag uretilir: `v1.0.0`, `v1.1.0`.
+## Application Repository Expectations
+
+Uygulama reposunda minimum workflow bulunur:
+
+```text
+.github/workflows/dev-ci-cd.yaml
+.github/workflows/jira-test-deploy.yaml
+.github/workflows/jira-prod-deploy.yaml
+```
+
+Uygulama workflow'u sadece platform workflow'unu tag ile cagirir:
+
+```yaml
+uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.11
+```
+
+`main` veya mutable branch referansi kullanilmaz.
+
+## Operating Model
+
+1. Platform degisikligi once bu repoda yapilir.
+2. `actionlint` ve lokal kontroller calistirilir.
+3. Platform owner review verir.
+4. Yeni tag uretilir.
 5. Uygulama repo'lari kontrollu sekilde yeni tag'e gecer.
+6. DEV otomatik dogrulanir.
+7. TEST/PROD sadece Jira/OpenProject SDLC talebiyle calistirilir.
+8. PROD icin GitHub Environment Protection approval zorunludur.
 
-## Dokumantasyon
+## Known Lab Limitations
 
-- Mimari: `docs/architecture.md`
-- Branch stratejisi: `docs/branching-strategy.md`
-- Security controls: `docs/security-controls.md`
-- Release governance: `docs/release-governance.md`
-- Audit modeli: `docs/audit-model.md`
-- Yeni uygulama onboarding: `docs/onboarding-new-application.md`
-- Workflow kontrati: `docs/workflow-contract.md`
-- GitHub test plani: `docs/github-test-plan.md`
-- GitHub environments ve secrets: `docs/github-environments-and-secrets.md`
-- Proxmox community tooling lab: `docs/proxmox-community-tooling-lab.md`
+- SonarQube Community branch analysis desteklemedigi icin lab'da `sonar_branch_analysis_enabled=false` kullanilir.
+- GraphNode lab API, gercek urun yerine HTTP-compatible mock servisidir.
+- Twistlock lab entegrasyonu, `twistcli` isimli Trivy-backed shim ile yapilir.
+- Gercek IIS deployment icin Windows Server VM henuz yoktur.
+- GitHub Actions loglarinda Node.js 20 deprecation uyarilari gorulebilir; mevcut run'i kirmiyor.
 
-## Uyum Notlari
+## Additional Docs
 
-- PROD deploy'da `dotnet build`, `dotnet publish`, `docker build` calistirilmaz.
-- Harbor icin immutable tag policy ve digest ile deploy onerilir.
-- Nexus release artifact repository immutable olmalidir.
-- Self-hosted runner network erisimleri ortam bazinda ayrilmalidir.
-- PROD environment secret'lari sadece GitHub Environment Protection approval sonrasi acilmalidir.
+- `docs/architecture.md`
+- `docs/branching-strategy.md`
+- `docs/security-controls.md`
+- `docs/release-governance.md`
+- `docs/audit-model.md`
+- `docs/onboarding-new-application.md`
+- `docs/workflow-contract.md`
+- `docs/github-test-plan.md`
+- `docs/github-environments-and-secrets.md`
+- `docs/proxmox-community-tooling-lab.md`
