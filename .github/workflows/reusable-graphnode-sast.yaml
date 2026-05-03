@@ -10,8 +10,8 @@ on:
       jira_issue_key: { required: false, type: string, default: "" }
       fail_on_high: { required: false, type: boolean, default: true }
       checkout_ref: { required: false, type: string, default: "" }
-      platform_repository: { required: false, type: string, default: bank-org/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.0 }
+      platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
+      platform_ref: { required: false, type: string, default: v1.0.5 }
     outputs:
       scan_id:
         value: ${{ jobs.graphnode.outputs.scan_id }}

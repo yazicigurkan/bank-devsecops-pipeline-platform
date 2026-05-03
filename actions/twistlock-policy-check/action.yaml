@@ -33,8 +33,8 @@ runs:
           --details \
           --output-file twistlock-result.json \
           "${{ inputs.image_reference }}"
-        critical=$(jq '[.results[].vulnerabilities[]? | select(.severity=="critical")] | length' twistlock-result.json)
-        high=$(jq '[.results[].vulnerabilities[]? | select(.severity=="high")] | length' twistlock-result.json)
+        critical=$(jq '[.results[].vulnerabilities[]? | select((.severity | ascii_downcase)=="critical")] | length' twistlock-result.json)
+        high=$(jq '[.results[].vulnerabilities[]? | select((.severity | ascii_downcase)=="high")] | length' twistlock-result.json)
         scan_id=$(jq -r '.scanId // "twistlock-local-scan"' twistlock-result.json)
         report_url="${{ inputs.console_url }}/monitor/vulnerabilities/images"
         echo "scan_id=${scan_id}" >> "$GITHUB_OUTPUT"

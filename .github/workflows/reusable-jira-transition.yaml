@@ -6,8 +6,8 @@ on:
       jira_issue_key: { required: true, type: string }
       transition_name: { required: true, type: string }
       comment: { required: true, type: string }
-      platform_repository: { required: false, type: string, default: bank-org/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.0 }
+      platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
+      platform_ref: { required: false, type: string, default: v1.0.5 }
     secrets:
       JIRA_BASE_URL: { required: true }
       JIRA_USER_EMAIL: { required: true }

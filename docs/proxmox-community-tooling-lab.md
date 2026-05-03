@@ -23,6 +23,13 @@ This lab provides self-hosted community/open-source equivalents for the bank Dev
 | 113 | harbor | 192.168.18.53 | Harbor + Trivy adapter | http://192.168.18.53 |
 | 114 | security-tools | 192.168.18.54 | Semgrep + Trivy CLI runners | CLI only |
 
+The `security-tools` container also hosts:
+
+- GitHub Actions self-hosted runner for `yazicigurkan/banking-dotnet-payment-api`
+- k3s single-node Kubernetes lab cluster
+- GraphNode-compatible lab API on `http://192.168.18.54:8080`
+- `twistcli` shim that executes Trivy and emits Twistlock-like JSON
+
 ## Runtime Model
 
 All services run in separate Debian 12 LXC containers with Docker Engine and Docker Compose.
@@ -79,6 +86,41 @@ Security tools:
 ssh root@192.168.18.2 "pct exec 114 -- /opt/security-tools/run-smoke.sh"
 ```
 
+## Configured Lab Resources
+
+Nexus repositories:
+
+| Repository | Format | Type | Purpose |
+| --- | --- | --- | --- |
+| `nuget-proxy` | NuGet | proxy | NuGet dependency proxy to nuget.org |
+| `dotnet-releases` | raw | hosted | Versioned .NET zip artifacts |
+| `release-evidence` | raw | hosted | Release manifest and evidence files |
+
+Harbor resources:
+
+| Resource | Value |
+| --- | --- |
+| Project | `payment` |
+| Scan on push | Enabled through project metadata |
+| Scanner | Harbor Trivy adapter |
+| Lab registry URL | `192.168.18.53` |
+
+SonarQube resources:
+
+| Resource | Value |
+| --- | --- |
+| Project key | `payment-api` |
+| Token | Stored on the Sonar LXC under `/root/devsecops-secrets/sonar-github-actions-token` |
+
+OpenProject resources:
+
+| Resource | Value |
+| --- | --- |
+| Project | `devsecops-sdlc` |
+| Work package type | `SDLC Change` |
+| SDLC statuses | Jira-equivalent Turkish status list |
+| API token | Stored on the OpenProject LXC under `/root/devsecops-secrets/openproject-api-token` |
+
 ## Pipeline Endpoint Mapping
 
 Use these as GitHub Environment secrets or organization-level variables:
@@ -93,14 +135,50 @@ Use these as GitHub Environment secrets or organization-level variables:
 | `TWISTLOCK_URL` | Replace with Trivy/Harbor scanner integration in lab |
 | `GRAPHNODE_URL` | Replace with Semgrep wrapper API, or run Semgrep CLI |
 
+In this lab, set:
+
+| Pipeline secret | Lab value |
+| --- | --- |
+| `GRAPHNODE_BASE_URL` | `http://192.168.18.54:8080` |
+| `TWISTLOCK_CONSOLE_URL` | `http://192.168.18.54:8080` |
+| `TWISTLOCK_USER` | `trivy-lab` |
+| `TWISTLOCK_PASSWORD` | `trivy-lab` |
+
+The `twistcli` command is provided by `/usr/local/bin/twistcli` on the runner host and delegates image scanning to Trivy.
+
+## GitHub Runner
+
+The lab runner is registered to the application repository:
+
+```text
+Repository: yazicigurkan/banking-dotnet-payment-api
+Runner: proxmox-security-tools-114
+Labels: self-hosted, linux, k8s, devsecops-lab
+```
+
+The runner has direct network access to the lab services and can deploy to the local k3s cluster.
+
+## k3s Lab Cluster
+
+k3s runs inside CT `114`.
+
+```bash
+ssh root@192.168.18.2 "pct exec 114 -- kubectl get nodes"
+ssh root@192.168.18.2 "pct exec 114 -- kubectl get pods -A"
+```
+
+The application repository stores `KUBE_CONFIG` as a base64-encoded GitHub secret. The lab kubeconfig points to `127.0.0.1:6443`, which is correct because deployment jobs run on the same self-hosted runner.
+
+Harbor is HTTP-only in the lab, so Docker and k3s containerd are configured with `192.168.18.53` as an insecure registry. Production must use TLS.
+
 ## Next Configuration Tasks
 
 1. OpenProject: create SDLC workflow statuses equivalent to Jira statuses.
-2. Nexus: create NuGet proxy, hosted release repository, and service account.
-3. SonarQube: create a token and Quality Gate.
-4. Harbor: create project `payment`, enable vulnerability scanning, and set tag immutability rules.
-5. security-tools: add a small Semgrep HTTP wrapper if pipeline compatibility with GraphNode endpoints is required.
-6. GitHub: add environment-level secrets for DEV, TEST, and PROD.
+2. Nexus: create a least-privilege service account instead of using `admin`.
+3. SonarQube: tune Quality Gate thresholds after the first real scan.
+4. Harbor: add immutable tag rules for `*-TEST-*` and `*-PROD-*`.
+5. OpenProject: map real workflow transitions and approvals.
+6. GitHub: move from broad repo-level secrets to stricter environment-only access after workflow hardening.
 
 ## Production Notes
 

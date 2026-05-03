@@ -4,8 +4,8 @@ set -euo pipefail
 result_file="$1"
 fail_on_high="${2:-true}"
 
-critical=$(jq '[.results[].vulnerabilities[]? | select(.severity=="critical")] | length' "$result_file")
-high=$(jq '[.results[].vulnerabilities[]? | select(.severity=="high")] | length' "$result_file")
+critical=$(jq '[.results[].vulnerabilities[]? | select((.severity | ascii_downcase)=="critical")] | length' "$result_file")
+high=$(jq '[.results[].vulnerabilities[]? | select((.severity | ascii_downcase)=="high")] | length' "$result_file")
 
 if [ "$critical" -gt 0 ]; then
   echo "Critical vulnerabilities: $critical" >&2
