@@ -62,7 +62,7 @@ PROD allowed status:
 PROD workflow'u su path'te release manifest bekler:
 
 ```text
-${NEXUS_BASE_URL}/repository/release-evidence/<application>/<version>/release-manifest.json
+${NEXUS_BASE_URL}/repository/release-evidence/<application>/<version>/<artifact_version>/release-manifest.json
 ```
 
 Manifestte zorunlu alanlar:

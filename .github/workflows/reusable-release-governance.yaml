@@ -7,6 +7,8 @@ on:
       release_version: { required: true, type: string }
       deployment_type: { required: true, type: string }
       jira_issue_key: { required: true, type: string }
+      artifact_version: { required: false, type: string, default: "" }
+      release_manifest_url: { required: false, type: string, default: "" }
       require_test_evidence: { required: false, type: boolean, default: true }
       require_change_window: { required: false, type: boolean, default: true }
       require_rollback_plan: { required: false, type: boolean, default: true }
@@ -41,7 +43,27 @@ jobs:
             echo "Release governance failed: $1" >&2
             exit 1
           }
-          manifest_url="${NEXUS_BASE_URL}/repository/release-evidence/${{ inputs.application_name }}/${{ inputs.release_version }}/release-manifest.json"
+          manifest_url="${{ inputs.release_manifest_url }}"
+          if [ -z "${manifest_url}" ] && [ -n "${{ inputs.artifact_version }}" ]; then
+            manifest_url="${NEXUS_BASE_URL}/repository/release-evidence/${{ inputs.application_name }}/${{ inputs.release_version }}/${{ inputs.artifact_version }}/release-manifest.json"
+          fi
+          if [ -z "${manifest_url}" ]; then
+            continuation=""
+            while :; do
+              query="${NEXUS_BASE_URL}/service/rest/v1/assets?repository=release-evidence"
+              [ -n "${continuation}" ] && query="${query}&continuationToken=${continuation}"
+              curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" -o assets.json "${query}"
+              jq -r --arg prefix "${{ inputs.application_name }}/${{ inputs.release_version }}/" '
+                .items[]
+                | select((.path | startswith($prefix)) and (.path | endswith("/release-manifest.json")))
+                | [.lastModified, .downloadUrl] | @tsv
+              ' assets.json >> candidates.tsv
+              continuation=$(jq -r '.continuationToken // empty' assets.json)
+              [ -z "${continuation}" ] && break
+            done
+            manifest_url=$(sort candidates.tsv 2>/dev/null | tail -n 1 | cut -f2-)
+          fi
+          [ -n "${manifest_url}" ] || fail "release manifest not found in Nexus"
           curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" -o release-manifest.json "$manifest_url"
           [ "$(jq -r '.application' release-manifest.json)" = "${{ inputs.application_name }}" ] || fail "application mismatch"
           [ "$(jq -r '.version' release-manifest.json)" = "${{ inputs.release_version }}" ] || fail "version mismatch"

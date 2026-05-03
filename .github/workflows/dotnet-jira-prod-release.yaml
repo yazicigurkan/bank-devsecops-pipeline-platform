@@ -8,6 +8,8 @@ on:
       repository_name: { required: true, type: string }
       branch_name: { required: true, type: string }
       release_version: { required: true, type: string }
+      artifact_version: { required: false, type: string, default: "" }
+      release_manifest_url: { required: false, type: string, default: "" }
       deployment_type: { required: true, type: string }
       target_environment: { required: true, type: string }
       nexus_repository: { required: true, type: string }
@@ -43,7 +45,7 @@ jobs:
           esac
 
   jira_validate:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.14
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.15
     needs: input_guard
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}
@@ -53,11 +55,13 @@ jobs:
     secrets: inherit
 
   governance:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-governance.yaml@v1.0.14
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-governance.yaml@v1.0.15
     needs: jira_validate
     with:
       application_name: ${{ inputs.application_name }}
       release_version: ${{ inputs.release_version }}
+      artifact_version: ${{ inputs.artifact_version }}
+      release_manifest_url: ${{ inputs.release_manifest_url }}
       deployment_type: ${{ inputs.deployment_type }}
       jira_issue_key: ${{ inputs.jira_issue_key }}
       require_test_evidence: true
@@ -74,7 +78,7 @@ jobs:
 
   iis_deploy:
     if: ${{ inputs.deployment_type == 'iis' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.14
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.15
     needs: [prod_gate, governance]
     with:
       application_name: ${{ inputs.application_name }}
@@ -91,7 +95,7 @@ jobs:
 
   gitops_update:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.14
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.15
     needs: [prod_gate, governance]
     with:
       application_name: ${{ inputs.application_name }}
@@ -106,7 +110,7 @@ jobs:
 
   jira_transition:
     if: ${{ always() && !cancelled() && (needs.iis_deploy.result == 'success' || needs.gitops_update.result == 'success') }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.14
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.15
     needs: [iis_deploy, gitops_update]
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}

@@ -7,7 +7,7 @@ Uygulama repository'leri pipeline logic kopyalamaz. Sadece bu repodaki tag'lenmi
 ```yaml
 jobs:
   dev:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.12
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.15
     with:
       application_name: payment-api
       deployment_type: kubernetes
@@ -21,7 +21,7 @@ Son basarili DEV run:
 
 - Application repo: `yazicigurkan/banking-dotnet-payment-api`
 - Branch: `DEV`
-- Platform tag: `v1.0.12`
+- Platform tag: `v1.0.15`
 - Run: `https://github.com/yazicigurkan/banking-dotnet-payment-api/actions/runs/25274845379`
 - Result: success
 
@@ -492,7 +492,7 @@ with:
 Release manifest lokasyonu:
 
 ```text
-${NEXUS_BASE_URL}/repository/release-evidence/<application>/<version>/release-manifest.json
+${NEXUS_BASE_URL}/repository/release-evidence/<application>/<version>/<artifact_version>/release-manifest.json
 ```
 
 ## Validation Commands
@@ -537,7 +537,7 @@ Uygulama reposunda minimum workflow bulunur:
 Uygulama workflow'u sadece platform workflow'unu tag ile cagirir:
 
 ```yaml
-uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.12
+uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.15
 ```
 
 `main` veya mutable branch referansi kullanilmaz.

@@ -56,5 +56,14 @@ jobs:
           echo "image_tag=${{ steps.image.outputs.image_reference }}" | awk -F: '{print "image_tag="$NF}' >> "$GITHUB_OUTPUT"
       - id: digest
         run: |
-          digest=$(docker buildx imagetools inspect "${{ steps.image.outputs.image_reference }}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          set -euo pipefail
+          repo_digest=$(docker image inspect "${{ steps.image.outputs.image_reference }}" --format '{{range .RepoDigests}}{{println .}}{{end}}' | head -n 1 || true)
+          digest="${repo_digest##*@}"
+          if [ -z "${digest}" ] || [ "${digest}" = "${repo_digest}" ]; then
+            digest=$(docker manifest inspect --insecure "${{ steps.image.outputs.image_reference }}" | jq -r '.Descriptor.digest // .config.digest // empty')
+          fi
+          if [ -z "${digest}" ]; then
+            echo "Unable to resolve pushed image digest for ${{ steps.image.outputs.image_reference }}" >&2
+            exit 1
+          fi
           echo "image_digest=${digest}" >> "$GITHUB_OUTPUT"
