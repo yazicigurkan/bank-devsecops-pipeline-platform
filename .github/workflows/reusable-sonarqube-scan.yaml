@@ -51,6 +51,7 @@ jobs:
             scanner_config=".sonar-nuget.config"
           fi
           export PATH="$PATH:$HOME/.dotnet/tools"
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
           dotnet tool update --global dotnet-sonarscanner --configfile "$scanner_config" \
             || dotnet tool install --global dotnet-sonarscanner --configfile "$scanner_config"
       - name: Begin analysis

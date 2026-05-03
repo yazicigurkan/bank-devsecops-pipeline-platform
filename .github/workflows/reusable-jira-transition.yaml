@@ -7,7 +7,7 @@ on:
       transition_name: { required: true, type: string }
       comment: { required: true, type: string }
       platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.8 }
+      platform_ref: { required: false, type: string, default: v1.0.9 }
     secrets:
       JIRA_BASE_URL: { required: true }
       JIRA_USER_EMAIL: { required: true }
