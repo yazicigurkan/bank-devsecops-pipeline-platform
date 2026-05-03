@@ -15,6 +15,8 @@ on:
     secrets:
       SONAR_HOST_URL: { required: true }
       SONAR_TOKEN: { required: true }
+      NUGET_USERNAME: { required: false }
+      NUGET_PASSWORD: { required: false }
 
 jobs:
   sonar:
@@ -31,7 +33,14 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Install scanner
-        run: dotnet tool install --global dotnet-sonarscanner
+        env:
+          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
+          NUGET_PASSWORD: ${{ secrets.NUGET_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet tool update --global dotnet-sonarscanner --configfile NuGet.config \
+            || dotnet tool install --global dotnet-sonarscanner --configfile NuGet.config
       - name: Begin analysis
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
