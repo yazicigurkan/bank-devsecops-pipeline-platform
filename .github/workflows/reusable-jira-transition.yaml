@@ -6,8 +6,6 @@ on:
       jira_issue_key: { required: true, type: string }
       transition_name: { required: true, type: string }
       comment: { required: true, type: string }
-      platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.9 }
     secrets:
       JIRA_BASE_URL: { required: true }
       JIRA_USER_EMAIL: { required: true }
@@ -17,17 +15,32 @@ jobs:
   transition:
     runs-on: self-hosted
     steps:
-      - name: Checkout pipeline scripts
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
-          path: .pipeline-platform
       - name: Add comment and transition
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: |
-          bash .pipeline-platform/scripts/jira/add-comment.sh "${JIRA_BASE_URL}" "${JIRA_USER_EMAIL}" "${JIRA_API_TOKEN}" "${{ inputs.jira_issue_key }}" "${{ inputs.comment }}"
-          bash .pipeline-platform/scripts/jira/transition-issue.sh "${JIRA_BASE_URL}" "${JIRA_USER_EMAIL}" "${JIRA_API_TOKEN}" "${{ inputs.jira_issue_key }}" "${{ inputs.transition_name }}"
+          set -euo pipefail
+          jq -n --arg body "${{ inputs.comment }}" \
+            '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$body}]}]}}' \
+            > jira-comment.json
+          curl -fsS -u "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d @jira-comment.json \
+            "${JIRA_BASE_URL}/rest/api/3/issue/${{ inputs.jira_issue_key }}/comment"
+          curl -fsS -u "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
+            "${JIRA_BASE_URL}/rest/api/3/issue/${{ inputs.jira_issue_key }}/transitions" \
+            -o transitions.json
+          transition_id=$(jq -r --arg name "${{ inputs.transition_name }}" '.transitions[] | select(.name == $name) | .id' transitions.json | head -1)
+          if [ -z "$transition_id" ]; then
+            echo "Transition not found: ${{ inputs.transition_name }}" >&2
+            exit 1
+          fi
+          jq -n --arg id "$transition_id" '{transition:{id:$id}}' > transition.json
+          curl -fsS -u "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d @transition.json \
+            "${JIRA_BASE_URL}/rest/api/3/issue/${{ inputs.jira_issue_key }}/transitions"

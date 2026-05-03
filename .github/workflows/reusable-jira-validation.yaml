@@ -7,8 +7,6 @@ on:
       target_environment: { required: true, type: string }
       allowed_statuses: { required: true, type: string }
       required_approvals: { required: true, type: string }
-      platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.9 }
       manager_approval_field: { required: false, type: string, default: customfield_managerApproval }
       security_approval_field: { required: false, type: string, default: customfield_securityApproval }
       test_approval_field: { required: false, type: string, default: customfield_testApproval }
@@ -31,14 +29,8 @@ jobs:
       current_status: ${{ steps.check.outputs.current_status }}
       approved_by: ${{ steps.check.outputs.approved_by }}
     steps:
-      - name: Checkout pipeline platform actions
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
-          path: .pipeline-platform
       - id: check
-        uses: ./.pipeline-platform/actions/jira-status-check
+        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/jira-status-check@v1.0.10
         with:
           base_url: ${{ secrets.JIRA_BASE_URL }}
           user_email: ${{ secrets.JIRA_USER_EMAIL }}

@@ -10,8 +10,6 @@ on:
       jira_issue_key: { required: false, type: string, default: "" }
       fail_on_high: { required: false, type: boolean, default: true }
       checkout_ref: { required: false, type: string, default: "" }
-      platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.9 }
     outputs:
       scan_id:
         value: ${{ jobs.graphnode.outputs.scan_id }}
@@ -44,16 +42,10 @@ jobs:
         with:
           fetch-depth: 2
           ref: ${{ inputs.checkout_ref || github.ref_name }}
-      - name: Checkout pipeline platform actions
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
-          path: .pipeline-platform
       - id: prev
         run: echo "previous_sha=$(git rev-parse HEAD^ 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
       - id: scan
-        uses: ./.pipeline-platform/actions/graphnode-scan
+        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/graphnode-scan@v1.0.10
         with:
           base_url: ${{ secrets.GRAPHNODE_BASE_URL }}
           token: ${{ secrets.GRAPHNODE_TOKEN }}

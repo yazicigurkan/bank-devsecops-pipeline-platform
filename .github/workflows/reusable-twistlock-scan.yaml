@@ -7,8 +7,6 @@ on:
       image_tar_artifact: { required: true, type: string }
       environment: { required: true, type: string }
       fail_on_high: { required: false, type: boolean, default: true }
-      platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.9 }
     outputs:
       scan_id:
         value: ${{ jobs.scan.outputs.scan_id }}
@@ -37,14 +35,8 @@ jobs:
           name: ${{ inputs.image_tar_artifact }}
       - name: Load image
         run: docker load -i image.tar
-      - name: Checkout pipeline platform actions
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
-          path: .pipeline-platform
       - id: policy
-        uses: ./.pipeline-platform/actions/twistlock-policy-check
+        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/twistlock-policy-check@v1.0.10
         with:
           console_url: ${{ secrets.TWISTLOCK_CONSOLE_URL }}
           username: ${{ secrets.TWISTLOCK_USER }}
