@@ -7,6 +7,7 @@ on:
       branch_name: { required: true, type: string }
       dotnet_solution: { required: true, type: string }
       checkout_ref: { required: false, type: string, default: "" }
+      branch_analysis_enabled: { required: false, type: boolean, default: true }
     outputs:
       quality_gate:
         value: ${{ jobs.sonar.outputs.quality_gate }}
@@ -38,20 +39,36 @@ jobs:
           NUGET_PASSWORD: ${{ secrets.NUGET_PASSWORD }}
         run: |
           set -euo pipefail
+          scanner_config="NuGet.config"
+          if [ -f NuGet.config ]; then
+            cp NuGet.config .sonar-nuget.config
+            if [ -n "${NUGET_USERNAME:-}" ] && [ -n "${NUGET_PASSWORD:-}" ]; then
+              sed -i \
+                -e "s|%NUGET_USERNAME%|${NUGET_USERNAME}|g" \
+                -e "s|%NUGET_PASSWORD%|${NUGET_PASSWORD}|g" \
+                .sonar-nuget.config
+            fi
+            scanner_config=".sonar-nuget.config"
+          fi
           export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet tool update --global dotnet-sonarscanner --configfile NuGet.config \
-            || dotnet tool install --global dotnet-sonarscanner --configfile NuGet.config
+          dotnet tool update --global dotnet-sonarscanner --configfile "$scanner_config" \
+            || dotnet tool install --global dotnet-sonarscanner --configfile "$scanner_config"
       - name: Begin analysis
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          BRANCH_ANALYSIS_ENABLED: ${{ inputs.branch_analysis_enabled }}
         run: |
-          dotnet sonarscanner begin \
+          args=(
             /k:"${{ inputs.project_key }}" \
             /d:sonar.host.url="${SONAR_HOST_URL}" \
             /d:sonar.token="${SONAR_TOKEN}" \
-            /d:sonar.branch.name="${{ inputs.branch_name }}" \
             /d:sonar.qualitygate.wait=true
+          )
+          if [ "${BRANCH_ANALYSIS_ENABLED}" = "true" ]; then
+            args+=(/d:sonar.branch.name="${{ inputs.branch_name }}")
+          fi
+          dotnet sonarscanner begin "${args[@]}"
       - name: Build for analysis
         run: dotnet build "${{ inputs.dotnet_solution }}" --configuration Release
       - name: End analysis
@@ -65,10 +82,19 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           set -euo pipefail
-          status=$(curl -fsS -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${{ inputs.project_key }}&branch=${{ inputs.branch_name }}" | jq -r '.projectStatus.status')
+          branch_query=""
+          if [ "${{ inputs.branch_analysis_enabled }}" = "true" ]; then
+            branch_query="&branch=${{ inputs.branch_name }}"
+          fi
+          status=$(curl -fsS -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${{ inputs.project_key }}${branch_query}" | jq -r '.projectStatus.status')
           echo "quality_gate=${status}" >> "$GITHUB_OUTPUT"
           test "$status" = "OK"
       - id: meta
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: echo "dashboard_url=${SONAR_HOST_URL}/dashboard?id=${{ inputs.project_key }}&branch=${{ inputs.branch_name }}" >> "$GITHUB_OUTPUT"
+        run: |
+          branch_query=""
+          if [ "${{ inputs.branch_analysis_enabled }}" = "true" ]; then
+            branch_query="&branch=${{ inputs.branch_name }}"
+          fi
+          echo "dashboard_url=${SONAR_HOST_URL}/dashboard?id=${{ inputs.project_key }}${branch_query}" >> "$GITHUB_OUTPUT"

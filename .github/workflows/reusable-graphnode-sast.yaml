@@ -11,7 +11,7 @@ on:
       fail_on_high: { required: false, type: boolean, default: true }
       checkout_ref: { required: false, type: string, default: "" }
       platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.6 }
+      platform_ref: { required: false, type: string, default: v1.0.8 }
     outputs:
       scan_id:
         value: ${{ jobs.graphnode.outputs.scan_id }}

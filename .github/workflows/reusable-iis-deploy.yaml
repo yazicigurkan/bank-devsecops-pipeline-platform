@@ -14,7 +14,7 @@ on:
       health_check_url: { required: true, type: string }
       rollback_enabled: { required: false, type: boolean, default: true }
       platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.6 }
+      platform_ref: { required: false, type: string, default: v1.0.8 }
     secrets:
       NEXUS_USERNAME: { required: true }
       NEXUS_PASSWORD: { required: true }
