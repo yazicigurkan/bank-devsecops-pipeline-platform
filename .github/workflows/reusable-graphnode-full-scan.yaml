@@ -10,7 +10,7 @@ on:
       jira_issue_key: { required: false, type: string, default: "" }
       checkout_ref: { required: false, type: string, default: "" }
       platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.5 }
+      platform_ref: { required: false, type: string, default: v1.0.6 }
     outputs:
       scan_id:
         value: ${{ jobs.full_scan.outputs.scan_id }}

@@ -46,7 +46,7 @@ jobs:
           esac
 
   jira_validate:
-    uses: ./.github/workflows/reusable-jira-validation.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.6
     needs: input_guard
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}
@@ -56,7 +56,7 @@ jobs:
     secrets: inherit
 
   build:
-    uses: ./.github/workflows/reusable-dotnet-build.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-dotnet-build.yaml@v1.0.6
     needs: jira_validate
     with:
       dotnet_solution: ${{ inputs.dotnet_solution }}
@@ -68,7 +68,7 @@ jobs:
     secrets: inherit
 
   sonar:
-    uses: ./.github/workflows/reusable-sonarqube-scan.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-sonarqube-scan.yaml@v1.0.6
     needs: build
     with:
       project_key: ${{ inputs.sonar_project_key }}
@@ -78,7 +78,7 @@ jobs:
     secrets: inherit
 
   graphnode:
-    uses: ./.github/workflows/reusable-graphnode-sast.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-graphnode-sast.yaml@v1.0.6
     needs: sonar
     with:
       project_key: ${{ inputs.graphnode_project_key }}
@@ -91,7 +91,7 @@ jobs:
     secrets: inherit
 
   nexus_publish:
-    uses: ./.github/workflows/reusable-nexus-publish.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-nexus-publish.yaml@v1.0.6
     needs: graphnode
     with:
       application_name: ${{ inputs.application_name }}
@@ -103,7 +103,7 @@ jobs:
 
   docker_build:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: ./.github/workflows/reusable-docker-build.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-docker-build.yaml@v1.0.6
     needs: graphnode
     with:
       application_name: ${{ inputs.application_name }}
@@ -116,7 +116,7 @@ jobs:
 
   twistlock:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: ./.github/workflows/reusable-twistlock-scan.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-twistlock-scan.yaml@v1.0.6
     needs: docker_build
     with:
       image_reference: ${{ needs.docker_build.outputs.image_reference }}
@@ -127,7 +127,7 @@ jobs:
 
   harbor_push:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: ./.github/workflows/reusable-harbor-push.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-harbor-push.yaml@v1.0.6
     needs: [docker_build, twistlock]
     with:
       image_reference: ${{ needs.docker_build.outputs.image_reference }}
@@ -136,7 +136,7 @@ jobs:
 
   k8s_deploy:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: ./.github/workflows/reusable-k8s-deploy.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-k8s-deploy.yaml@v1.0.6
     needs: [harbor_push, nexus_publish]
     with:
       application_name: ${{ inputs.application_name }}
@@ -156,7 +156,7 @@ jobs:
 
   iis_deploy:
     if: ${{ inputs.deployment_type == 'iis' }}
-    uses: ./.github/workflows/reusable-iis-deploy.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.6
     needs: nexus_publish
     with:
       application_name: ${{ inputs.application_name }}
@@ -173,7 +173,7 @@ jobs:
 
   jira_transition:
     if: ${{ always() && !cancelled() && (needs.publish_evidence_k8s.result == 'success' || needs.publish_evidence_iis.result == 'success') }}
-    uses: ./.github/workflows/reusable-jira-transition.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.6
     needs: [publish_evidence_k8s, publish_evidence_iis]
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}
@@ -183,7 +183,7 @@ jobs:
 
   publish_evidence_k8s:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: ./.github/workflows/reusable-release-evidence-publish.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-evidence-publish.yaml@v1.0.6
     needs: [jira_validate, sonar, graphnode, nexus_publish, docker_build, twistlock, harbor_push, k8s_deploy]
     with:
       application_name: ${{ inputs.application_name }}
@@ -214,7 +214,7 @@ jobs:
 
   publish_evidence_iis:
     if: ${{ inputs.deployment_type == 'iis' }}
-    uses: ./.github/workflows/reusable-release-evidence-publish.yaml
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-evidence-publish.yaml@v1.0.6
     needs: [jira_validate, sonar, graphnode, nexus_publish, iis_deploy]
     with:
       application_name: ${{ inputs.application_name }}

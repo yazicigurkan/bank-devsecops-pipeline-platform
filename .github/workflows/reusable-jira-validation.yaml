@@ -8,7 +8,7 @@ on:
       allowed_statuses: { required: true, type: string }
       required_approvals: { required: true, type: string }
       platform_repository: { required: false, type: string, default: yazicigurkan/bank-devsecops-pipeline-platform }
-      platform_ref: { required: false, type: string, default: v1.0.5 }
+      platform_ref: { required: false, type: string, default: v1.0.6 }
       manager_approval_field: { required: false, type: string, default: customfield_managerApproval }
       security_approval_field: { required: false, type: string, default: customfield_securityApproval }
       test_approval_field: { required: false, type: string, default: customfield_testApproval }
