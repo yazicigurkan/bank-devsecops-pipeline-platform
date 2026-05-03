@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.checkout_ref || github.ref_name }}
       - id: scan
-        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/graphnode-scan@v1.0.12
+        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/graphnode-scan@v1.0.14
         with:
           base_url: ${{ secrets.GRAPHNODE_BASE_URL }}
           token: ${{ secrets.GRAPHNODE_TOKEN }}
