@@ -30,7 +30,7 @@ jobs:
       approved_by: ${{ steps.check.outputs.approved_by }}
     steps:
       - id: check
-        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/jira-status-check@v1.0.15
+        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/jira-status-check@v1.0.16
         with:
           base_url: ${{ secrets.JIRA_BASE_URL }}
           user_email: ${{ secrets.JIRA_USER_EMAIL }}
