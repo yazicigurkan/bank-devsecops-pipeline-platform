@@ -10,6 +10,7 @@ on:
       jira_issue_key: { required: true, type: string }
       artifact_url: { required: true, type: string }
       artifact_version: { required: true, type: string }
+      artifact_repository: { required: false, type: string, default: "dotnet-releases" }
       image_reference: { required: false, type: string, default: "" }
       image_tag: { required: false, type: string, default: "" }
       image_digest: { required: false, type: string, default: "" }
@@ -44,16 +45,21 @@ jobs:
       - name: Create release manifest
         env:
           APPROVED_BY_JSON: ${{ inputs.approved_by }}
+          NEXUS_BASE_URL: ${{ secrets.NEXUS_BASE_URL }}
         run: |
           set -euo pipefail
           approved_by=$(jq -c . <<< "${APPROVED_BY_JSON}" 2>/dev/null || echo '{}')
+          artifact_url="${{ inputs.artifact_url }}"
+          if [ -z "${artifact_url}" ]; then
+            artifact_url="${NEXUS_BASE_URL}/repository/${{ inputs.artifact_repository }}/${{ inputs.application_name }}/${{ inputs.artifact_version }}/${{ inputs.application_name }}.zip"
+          fi
           jq -n \
             --arg application "${{ inputs.application_name }}" \
             --arg version "${{ inputs.release_version }}" \
             --arg environment "${{ inputs.environment }}" \
             --arg deploymentType "${{ inputs.deployment_type }}" \
             --arg commitSha "${GITHUB_SHA}" \
-            --arg artifactUrl "${{ inputs.artifact_url }}" \
+            --arg artifactUrl "${artifact_url}" \
             --arg artifactVersion "${{ inputs.artifact_version }}" \
             --arg image "${{ inputs.image_reference }}" \
             --arg imageTag "${{ inputs.image_tag }}" \
@@ -103,7 +109,7 @@ jobs:
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
         run: |
           set -euo pipefail
-          target="${NEXUS_BASE_URL}/repository/release-evidence/${{ inputs.application_name }}/${{ inputs.release_version }}/release-manifest.json"
+          target="${NEXUS_BASE_URL}/repository/release-evidence/${{ inputs.application_name }}/${{ inputs.release_version }}/${{ inputs.artifact_version }}/release-manifest.json"
           curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" --upload-file release-manifest.json "$target"
           echo "manifest_url=${target}" >> "$GITHUB_OUTPUT"
           echo "### Release evidence" >> "$GITHUB_STEP_SUMMARY"
