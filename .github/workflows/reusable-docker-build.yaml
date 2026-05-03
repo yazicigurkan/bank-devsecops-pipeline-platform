@@ -6,6 +6,7 @@ on:
       application_name: { required: true, type: string }
       environment: { required: true, type: string }
       release_version: { required: true, type: string }
+      harbor_registry: { required: true, type: string }
       image_name: { required: true, type: string }
       harbor_project: { required: true, type: string }
       dockerfile: { required: false, type: string, default: Dockerfile }
@@ -18,9 +19,6 @@ on:
         value: ${{ jobs.docker.outputs.image_tag }}
       image_tar_artifact:
         value: ${{ jobs.docker.outputs.image_tar_artifact }}
-    secrets:
-      HARBOR_REGISTRY: { required: true }
-
 jobs:
   docker:
     runs-on: self-hosted
@@ -33,12 +31,10 @@ jobs:
         with:
           ref: ${{ inputs.checkout_ref || github.ref_name }}
       - id: meta
-        env:
-          HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY }}
         run: |
           short_sha="${GITHUB_SHA::7}"
           tag="${{ inputs.release_version }}-${{ inputs.environment }}-${short_sha}-${{ github.run_number }}"
-          image="${HARBOR_REGISTRY}/${{ inputs.harbor_project }}/${{ inputs.image_name }}:${tag}"
+          image="${{ inputs.harbor_registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}:${tag}"
           {
             echo "image_tag=${tag}"
             echo "image_reference=${image}"

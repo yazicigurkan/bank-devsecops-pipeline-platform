@@ -3,8 +3,12 @@ name: reusable harbor push
 on:
   workflow_call:
     inputs:
-      image_reference: { required: true, type: string }
+      image_reference: { required: false, type: string, default: "" }
       image_tar_artifact: { required: true, type: string }
+      harbor_registry: { required: false, type: string, default: "" }
+      harbor_project: { required: false, type: string, default: "" }
+      image_name: { required: false, type: string, default: "" }
+      image_tag: { required: false, type: string, default: "" }
     outputs:
       image_tag:
         value: ${{ jobs.push.outputs.image_tag }}
@@ -26,6 +30,19 @@ jobs:
         with:
           name: ${{ inputs.image_tar_artifact }}
       - run: docker load -i image.tar
+      - id: image
+        name: Resolve image reference
+        run: |
+          set -euo pipefail
+          image_reference="${{ inputs.image_reference }}"
+          if [ -z "$image_reference" ]; then
+            image_reference="${{ inputs.harbor_registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}:${{ inputs.image_tag }}"
+          fi
+          if [ -z "$image_reference" ] || [ "$image_reference" = "//:" ]; then
+            echo "image reference is required" >&2
+            exit 1
+          fi
+          echo "image_reference=${image_reference}" >> "$GITHUB_OUTPUT"
       - name: Login
         env:
           HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY }}
@@ -33,11 +50,11 @@ jobs:
           HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
         run: echo "${HARBOR_PASSWORD}" | docker login "${HARBOR_REGISTRY}" -u "${HARBOR_USERNAME}" --password-stdin
       - name: Push
-        run: docker push "${{ inputs.image_reference }}"
+        run: docker push "${{ steps.image.outputs.image_reference }}"
       - id: meta
         run: |
-          echo "image_tag=${{ inputs.image_reference }}" | awk -F: '{print "image_tag="$NF}' >> "$GITHUB_OUTPUT"
+          echo "image_tag=${{ steps.image.outputs.image_reference }}" | awk -F: '{print "image_tag="$NF}' >> "$GITHUB_OUTPUT"
       - id: digest
         run: |
-          digest=$(docker buildx imagetools inspect "${{ inputs.image_reference }}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          digest=$(docker buildx imagetools inspect "${{ steps.image.outputs.image_reference }}" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "image_digest=${digest}" >> "$GITHUB_OUTPUT"

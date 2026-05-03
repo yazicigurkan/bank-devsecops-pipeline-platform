@@ -3,8 +3,12 @@ name: reusable twistlock scan
 on:
   workflow_call:
     inputs:
-      image_reference: { required: true, type: string }
+      image_reference: { required: false, type: string, default: "" }
       image_tar_artifact: { required: true, type: string }
+      harbor_registry: { required: false, type: string, default: "" }
+      harbor_project: { required: false, type: string, default: "" }
+      image_name: { required: false, type: string, default: "" }
+      image_tag: { required: false, type: string, default: "" }
       environment: { required: true, type: string }
       fail_on_high: { required: false, type: boolean, default: true }
     outputs:
@@ -35,12 +39,25 @@ jobs:
           name: ${{ inputs.image_tar_artifact }}
       - name: Load image
         run: docker load -i image.tar
+      - id: image
+        name: Resolve image reference
+        run: |
+          set -euo pipefail
+          image_reference="${{ inputs.image_reference }}"
+          if [ -z "$image_reference" ]; then
+            image_reference="${{ inputs.harbor_registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}:${{ inputs.image_tag }}"
+          fi
+          if [ -z "$image_reference" ] || [ "$image_reference" = "//:" ]; then
+            echo "image reference is required" >&2
+            exit 1
+          fi
+          echo "image_reference=${image_reference}" >> "$GITHUB_OUTPUT"
       - id: policy
-        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/twistlock-policy-check@v1.0.10
+        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/twistlock-policy-check@v1.0.11
         with:
           console_url: ${{ secrets.TWISTLOCK_CONSOLE_URL }}
           username: ${{ secrets.TWISTLOCK_USER }}
           password: ${{ secrets.TWISTLOCK_PASSWORD }}
-          image_reference: ${{ inputs.image_reference }}
+          image_reference: ${{ steps.image.outputs.image_reference }}
           environment: ${{ inputs.environment }}
           fail_on_high: ${{ inputs.fail_on_high }}
