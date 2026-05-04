@@ -95,5 +95,5 @@ runs:
             fi
           fi
         fi
-        approved_by=$(jq -n --arg manager "$manager_approval" --arg security "$security_approval" --arg test "$test_approval" '{manager:$manager,security:$security,test:$test}')
+        approved_by=$(jq -c -n --arg manager "$manager_approval" --arg security "$security_approval" --arg test "$test_approval" '{manager:$manager,security:$security,test:$test}')
         echo "approved_by=${approved_by}" >> "$GITHUB_OUTPUT"
