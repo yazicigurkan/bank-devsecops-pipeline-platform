@@ -60,7 +60,7 @@ jobs:
           esac
 
   jira_validate:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.20
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.21
     needs: input_guard
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}
@@ -70,7 +70,7 @@ jobs:
     secrets: inherit
 
   governance:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-governance.yaml@v1.0.20
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-governance.yaml@v1.0.21
     needs: jira_validate
     with:
       application_name: ${{ inputs.application_name }}
@@ -93,7 +93,7 @@ jobs:
 
   iis_deploy:
     if: ${{ inputs.deployment_type == 'iis' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.20
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.21
     needs: [prod_gate, governance]
     with:
       application_name: ${{ inputs.application_name }}
@@ -110,7 +110,7 @@ jobs:
 
   gitops_update:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.20
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.21
     needs: [prod_gate, governance]
     with:
       application_name: ${{ inputs.application_name }}
@@ -125,7 +125,7 @@ jobs:
 
   jira_transition:
     if: ${{ always() && !cancelled() && (needs.iis_deploy.result == 'success' || needs.gitops_update.result == 'success') }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.20
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.21
     needs: [iis_deploy, gitops_update]
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}

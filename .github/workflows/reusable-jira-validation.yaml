@@ -12,6 +12,7 @@ on:
       test_approval_field: { required: false, type: string, default: customfield_testApproval }
       change_window_field: { required: false, type: string, default: customfield_changeWindow }
       rollback_plan_field: { required: false, type: string, default: customfield_rollbackPlan }
+      target_environment_field: { required: false, type: string, default: customfield_targetEnvironment }
     outputs:
       current_status:
         value: ${{ jobs.validate.outputs.current_status }}
@@ -30,7 +31,7 @@ jobs:
       approved_by: ${{ steps.check.outputs.approved_by }}
     steps:
       - id: check
-        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/jira-status-check@v1.0.20
+        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/jira-status-check@v1.0.21
         with:
           base_url: ${{ secrets.JIRA_BASE_URL }}
           user_email: ${{ secrets.JIRA_USER_EMAIL }}
@@ -44,3 +45,4 @@ jobs:
           test_approval_field: ${{ inputs.test_approval_field }}
           change_window_field: ${{ inputs.change_window_field }}
           rollback_plan_field: ${{ inputs.rollback_plan_field }}
+          target_environment_field: ${{ inputs.target_environment_field }}

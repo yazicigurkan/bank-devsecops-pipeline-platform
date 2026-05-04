@@ -7,7 +7,7 @@ Uygulama repository'leri pipeline logic kopyalamaz. Sadece bu repodaki tag'lenmi
 ```yaml
 jobs:
   dev:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.20
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.21
     with:
       application_name: payment-api
       deployment_type: kubernetes
@@ -21,7 +21,7 @@ Son basarili DEV run:
 
 - Application repo: `yazicigurkan/banking-dotnet-payment-api`
 - Branch: `DEV`
-- Platform tag: `v1.0.20`
+- Platform tag: `v1.0.21`
 - Run: `https://github.com/yazicigurkan/banking-dotnet-payment-api/actions/runs/25274845379`
 - Result: success
 

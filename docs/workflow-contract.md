@@ -70,6 +70,7 @@ Versioning kurali:
 - DEV artifact ve image tag formatı: `<application>-DEV-<short_sha>-<run_number>`.
 - TEST artifact ve image tag formatı: OpenProject/Jira talebindeki `release_version`, ornek `v1.1.1`.
 - PROD yeni build almaz; TEST manifestindeki artifact/image tag ve digest'i promote eder.
+- Jira/OpenProject talebindeki target environment alanı pipeline hedefiyle eşleşmelidir; TEST talebi PROD, PROD talebi TEST pipeline'ını tetikleyemez.
 
 Manifestte zorunlu alanlar:
 

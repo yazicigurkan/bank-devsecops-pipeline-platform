@@ -13,6 +13,7 @@ inputs:
   test_approval_field: { required: false, default: customfield_testApproval }
   change_window_field: { required: false, default: customfield_changeWindow }
   rollback_plan_field: { required: false, default: customfield_rollbackPlan }
+  target_environment_field: { required: false, default: customfield_targetEnvironment }
 outputs:
   current_status:
     value: ${{ steps.validate.outputs.current_status }}
@@ -28,7 +29,7 @@ runs:
         JIRA_API_TOKEN: ${{ inputs.api_token }}
       run: |
         set -euo pipefail
-        fields="status,${{ inputs.manager_approval_field }},${{ inputs.security_approval_field }},${{ inputs.test_approval_field }},${{ inputs.change_window_field }},${{ inputs.rollback_plan_field }}"
+        fields="status,${{ inputs.manager_approval_field }},${{ inputs.security_approval_field }},${{ inputs.test_approval_field }},${{ inputs.change_window_field }},${{ inputs.rollback_plan_field }},${{ inputs.target_environment_field }}"
         curl -fsS -u "${JIRA_USER_EMAIL}:${JIRA_API_TOKEN}" \
           "${{ inputs.base_url }}/rest/api/3/issue/${{ inputs.issue_key }}?fields=${fields}" \
           -o jira-issue.json
@@ -59,6 +60,15 @@ runs:
         manager_approval="$(read_field "${{ inputs.manager_approval_field }}")"
         security_approval="$(read_field "${{ inputs.security_approval_field }}")"
         test_approval="$(read_field "${{ inputs.test_approval_field }}")"
+        requested_environment="$(read_field "${{ inputs.target_environment_field }}")"
+        if [ "$requested_environment" = "" ]; then
+          echo "Missing target environment field ${{ inputs.target_environment_field }}" >&2
+          exit 1
+        fi
+        if [ "$requested_environment" != "${{ inputs.target_environment }}" ]; then
+          echo "Jira issue target environment '${requested_environment}' does not match pipeline target '${{ inputs.target_environment }}'" >&2
+          exit 1
+        fi
         if [[ "$approvals" == *"manager"* ]] && [ "$manager_approval" != "Approved" ]; then
           echo "Missing manager approval" >&2
           exit 1
