@@ -45,7 +45,7 @@ jobs:
       - id: prev
         run: echo "previous_sha=$(git rev-parse HEAD^ 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
       - id: scan
-        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/graphnode-scan@v1.0.17
+        uses: yazicigurkan/bank-devsecops-pipeline-platform/actions/graphnode-scan@v1.0.18
         with:
           base_url: ${{ secrets.GRAPHNODE_BASE_URL }}
           token: ${{ secrets.GRAPHNODE_TOKEN }}

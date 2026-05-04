@@ -55,13 +55,17 @@ jobs:
               curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" -o assets.json "${query}"
               jq -r --arg prefix "${{ inputs.application_name }}/${{ inputs.release_version }}/" '
                 .items[]
-                | select((.path | startswith($prefix)) and (.path | endswith("/release-manifest.json")))
-                | [.lastModified, .downloadUrl] | @tsv
+                | (.path | ltrimstr("/")) as $normalized_path
+                | select(($normalized_path | startswith($prefix)) and ($normalized_path | endswith("/release-manifest.json")))
+                | [.lastModified, $normalized_path] | @tsv
               ' assets.json >> candidates.tsv
               continuation=$(jq -r '.continuationToken // empty' assets.json)
               [ -z "${continuation}" ] && break
             done
-            manifest_url=$(sort candidates.tsv 2>/dev/null | tail -n 1 | cut -f2-)
+            manifest_path=$(sort candidates.tsv 2>/dev/null | tail -n 1 | cut -f2-)
+            if [ -n "${manifest_path}" ]; then
+              manifest_url="${NEXUS_BASE_URL}/repository/release-evidence/${manifest_path}"
+            fi
           fi
           [ -n "${manifest_url}" ] || fail "release manifest not found in Nexus"
           curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" -o release-manifest.json "$manifest_url"

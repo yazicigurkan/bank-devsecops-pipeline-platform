@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   build:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-dotnet-build.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-dotnet-build.yaml@v1.0.18
     with:
       dotnet_solution: ${{ inputs.dotnet_solution }}
       project_path: ${{ inputs.project_path }}
@@ -43,7 +43,7 @@ jobs:
     secrets: inherit
 
   sonar:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-sonarqube-scan.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-sonarqube-scan.yaml@v1.0.18
     needs: build
     with:
       project_key: ${{ inputs.sonar_project_key }}
@@ -54,7 +54,7 @@ jobs:
     secrets: inherit
 
   graphnode:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-graphnode-sast.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-graphnode-sast.yaml@v1.0.18
     needs: sonar
     with:
       project_key: ${{ inputs.graphnode_project_key }}
@@ -67,7 +67,7 @@ jobs:
     secrets: inherit
 
   nexus_publish:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-nexus-publish.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-nexus-publish.yaml@v1.0.18
     needs: graphnode
     with:
       application_name: ${{ inputs.application_name }}
@@ -79,7 +79,7 @@ jobs:
 
   docker_build:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-docker-build.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-docker-build.yaml@v1.0.18
     needs: graphnode
     with:
       application_name: ${{ inputs.application_name }}
@@ -93,7 +93,7 @@ jobs:
 
   twistlock:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-twistlock-scan.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-twistlock-scan.yaml@v1.0.18
     needs: docker_build
     with:
       image_reference: ${{ needs.docker_build.outputs.image_reference }}
@@ -108,7 +108,7 @@ jobs:
 
   harbor_push:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-harbor-push.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-harbor-push.yaml@v1.0.18
     needs: [docker_build, twistlock]
     with:
       image_reference: ${{ needs.docker_build.outputs.image_reference }}
@@ -121,7 +121,7 @@ jobs:
 
   gitops_update:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.18
     needs: [harbor_push, nexus_publish]
     with:
       application_name: ${{ inputs.application_name }}
@@ -136,7 +136,7 @@ jobs:
 
   iis_deploy:
     if: ${{ inputs.deployment_type == 'iis' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.18
     needs: nexus_publish
     with:
       application_name: ${{ inputs.application_name }}
@@ -153,7 +153,7 @@ jobs:
 
   publish_evidence_k8s:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-evidence-publish.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-evidence-publish.yaml@v1.0.18
     needs: [sonar, graphnode, nexus_publish, docker_build, twistlock, harbor_push, gitops_update]
     with:
       application_name: ${{ inputs.application_name }}
@@ -182,7 +182,7 @@ jobs:
 
   publish_evidence_iis:
     if: ${{ inputs.deployment_type == 'iis' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-evidence-publish.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-evidence-publish.yaml@v1.0.18
     needs: [sonar, graphnode, nexus_publish, iis_deploy]
     with:
       application_name: ${{ inputs.application_name }}
