@@ -17,7 +17,10 @@ jobs:
         run: |
           ruby -e 'require "yaml"; files = Dir[".github/workflows/*.{yaml,yml}"] + Dir["actions/*/action.yaml"] + Dir["templates/app-repo-workflows/*.{yaml,yml}"]; files.each { |f| YAML.load_file(f); puts "OK #{f}" }'
       - name: Validate shell scripts
-        run: find scripts -name "*.sh" -print0 | xargs -0 -n1 bash -n
+        run: |
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find scripts -name "*.sh" -print0)
       - name: Validate JSON templates
         run: |
           ruby -rjson -e 'Dir["templates/**/*.json"].each { |f| JSON.parse(File.read(f)); puts "OK #{f}" }'
@@ -25,3 +28,5 @@ jobs:
         run: |
           scripts/local/simulate-pipeline.sh all
           scripts/local/simulate-pipeline.sh negative
+          scripts/release/validate-release-version.sh v1.1.1
+          scripts/release/validate-release-version.sh v1.1.1-rc.1

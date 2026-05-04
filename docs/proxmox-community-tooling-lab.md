@@ -52,7 +52,7 @@ vm.max_map_count=262144
 
 ## Initial Access
 
-Do not store generated passwords in Git. The Proxmox host keeps a root-only access note for this lab:
+Do not store generated passwords in Git or ticket comments. The Proxmox host keeps a root-only access note for this lab; open it only in a trusted local terminal:
 
 ```bash
 cat /root/devsecops-lab-credentials/README.txt
@@ -66,37 +66,14 @@ pct enter 110
 ssh root@192.168.18.50
 ```
 
-OpenProject:
+Prefer piping product credentials directly into GitHub Environment secrets instead of printing them:
 
 ```bash
-pct exec 110 -- cat /root/devsecops-secrets/openproject-admin-password
-pct exec 110 -- cat /root/devsecops-secrets/openproject-api-token
-```
-
-Nexus:
-
-```bash
-pct exec 111 -- cat /root/devsecops-secrets/nexus-admin-password
-```
-
-SonarQube:
-
-```bash
-pct exec 112 -- cat /root/devsecops-secrets/sonar-admin-password
-pct exec 112 -- cat /root/devsecops-secrets/sonar-github-actions-token
-```
-
-Harbor:
-
-```bash
-# Username: admin
-pct exec 113 -- cat /root/harbor-admin-password.txt
-```
-
-Security tools:
-
-```bash
-pct exec 114 -- cat /root/devsecops-secrets/graphnode-token
+pct exec 110 -- cat /root/devsecops-secrets/openproject-api-token | gh secret set JIRA_API_TOKEN --repo yazicigurkan/banking-dotnet-payment-api --env TEST
+pct exec 111 -- cat /root/devsecops-secrets/nexus-admin-password | gh secret set NEXUS_PASSWORD --repo yazicigurkan/banking-dotnet-payment-api --env TEST
+pct exec 112 -- cat /root/devsecops-secrets/sonar-github-actions-token | gh secret set SONAR_TOKEN --repo yazicigurkan/banking-dotnet-payment-api --env TEST
+pct exec 113 -- cat /root/harbor-admin-password.txt | gh secret set HARBOR_PASSWORD --repo yazicigurkan/banking-dotnet-payment-api --env TEST
+pct exec 114 -- cat /root/devsecops-secrets/graphnode-token | gh secret set GRAPHNODE_TOKEN --repo yazicigurkan/banking-dotnet-payment-api --env TEST
 pct exec 114 -- /opt/security-tools/run-smoke.sh
 ```
 
@@ -256,7 +233,7 @@ To enable IIS deployment tests:
 1. OpenProject: create SDLC workflow statuses equivalent to Jira statuses.
 2. Nexus: create a least-privilege service account instead of using `admin`.
 3. SonarQube: tune Quality Gate thresholds after the first real scan.
-4. Harbor: add immutable tag rules for `*-TEST-*` and `*-PROD-*`.
+4. Harbor: add immutable tag rules for release tags such as `v*` and keep DEV tags mutable/retention-managed.
 5. OpenProject: map real workflow transitions and approvals.
 6. GitHub: move from broad repo-level secrets to stricter environment-only access after workflow hardening.
 

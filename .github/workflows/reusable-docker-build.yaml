@@ -39,6 +39,13 @@ jobs:
           else
             tag="${{ inputs.release_version }}"
           fi
+          case "$tag" in
+            ""|.*|-*|*/*|*\\*|*:*|*" "*|*..*)
+              echo "Invalid image tag='${tag}'. Use a Docker-safe release version such as v1.1.1." >&2
+              exit 1
+              ;;
+          esac
+          [ "${#tag}" -le 128 ] || { echo "Invalid image tag='${tag}': Docker tag length exceeds 128." >&2; exit 1; }
           image="${{ inputs.harbor_registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}:${tag}"
           {
             echo "image_tag=${tag}"

@@ -37,6 +37,12 @@ jobs:
           else
             version="${{ inputs.release_version }}"
           fi
+          case "$version" in
+            ""|.*|-*|*/*|*\\*|*:*|*" "*|*..*)
+              echo "Invalid artifact_version='${version}'. Use a Nexus-safe release version such as v1.1.1." >&2
+              exit 1
+              ;;
+          esac
           echo "artifact_version=${version}" >> "$GITHUB_OUTPUT"
       - id: upload
         env:

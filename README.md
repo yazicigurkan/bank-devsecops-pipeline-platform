@@ -7,7 +7,7 @@ Uygulama repository'leri pipeline logic kopyalamaz. Sadece bu repodaki tag'lenmi
 ```yaml
 jobs:
   dev:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.19
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.20
     with:
       application_name: payment-api
       deployment_type: kubernetes
@@ -21,7 +21,7 @@ Son basarili DEV run:
 
 - Application repo: `yazicigurkan/banking-dotnet-payment-api`
 - Branch: `DEV`
-- Platform tag: `v1.0.19`
+- Platform tag: `v1.0.20`
 - Run: `https://github.com/yazicigurkan/banking-dotnet-payment-api/actions/runs/25274845379`
 - Result: success
 
@@ -79,7 +79,7 @@ ssh root@192.168.18.53
 ssh root@192.168.18.54
 ```
 
-Container root parolalari Proxmox host uzerinde root-only dosyada tutulur:
+Container root parolalari Proxmox host uzerinde root-only dosyada tutulur. Degerleri ortak ekranlara veya ticket comment'lerine kopyalamayin; sadece lokal terminalde ihtiyac oldugunda acin:
 
 ```bash
 cat /root/devsecops-lab-credentials/ct-root-passwords.txt
@@ -95,30 +95,15 @@ Parolalari GitHub'a, README'ye veya pipeline loglarina yazmayin.
 
 ## Product Credentials
 
-Urun parolalari ilgili LXC icinde dosya olarak tutulur. Proxmox host uzerinden okumak icin:
+Urun parolalari ilgili LXC icinde dosya olarak tutulur. Best practice olarak degerleri terminale yazdirmadan GitHub Environment secret olarak aktar:
 
 ```bash
-# OpenProject admin password
-pct exec 110 -- cat /root/devsecops-secrets/openproject-admin-password
-
-# OpenProject API token
-pct exec 110 -- cat /root/devsecops-secrets/openproject-api-token
-
-# Nexus admin password
-pct exec 111 -- cat /root/devsecops-secrets/nexus-admin-password
-
-# SonarQube admin password
-pct exec 112 -- cat /root/devsecops-secrets/sonar-admin-password
-
-# SonarQube GitHub Actions token
-pct exec 112 -- cat /root/devsecops-secrets/sonar-github-actions-token
-
-# Harbor admin password
-pct exec 113 -- cat /root/harbor-admin-password.txt
-
-# GraphNode lab API token
-pct exec 114 -- cat /root/devsecops-secrets/graphnode-token
+pct exec 111 -- cat /root/devsecops-secrets/nexus-admin-password | gh secret set NEXUS_PASSWORD --repo yazicigurkan/banking-dotnet-payment-api --env TEST
+pct exec 112 -- cat /root/devsecops-secrets/sonar-github-actions-token | gh secret set SONAR_TOKEN --repo yazicigurkan/banking-dotnet-payment-api --env TEST
+pct exec 113 -- cat /root/harbor-admin-password.txt | gh secret set HARBOR_PASSWORD --repo yazicigurkan/banking-dotnet-payment-api --env TEST
 ```
+
+Labda manuel login icin parola gormek gerekiyorsa, komutu sadece lokal ve guvenli terminalde calistir; ciktisini issue, README veya pipeline loguna yazma.
 
 ## Kubernetes Environment
 
@@ -578,6 +563,7 @@ uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev
 - `docs/audit-model.md`
 - `docs/onboarding-new-application.md`
 - `docs/workflow-contract.md`
+- `docs/best-practice-review.md`
 - `docs/github-test-plan.md`
 - `docs/github-environments-and-secrets.md`
 - `docs/proxmox-community-tooling-lab.md`

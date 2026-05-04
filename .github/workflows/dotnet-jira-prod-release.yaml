@@ -30,6 +30,10 @@ permissions:
   id-token: write
   actions: read
 
+concurrency:
+  group: ${{ github.repository }}-${{ inputs.application_name }}-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
 jobs:
   input_guard:
     runs-on: self-hosted
@@ -39,13 +43,24 @@ jobs:
           set -euo pipefail
           [ "${{ inputs.branch_name }}" = "PROD" ]
           [ "${{ inputs.target_environment }}" = "PROD" ]
+          release_version="${{ inputs.release_version }}"
+          case "$release_version" in
+            ""|.*|-*|*/*|*\\*|*:*|*" "*|*..*)
+              echo "Invalid release_version='${release_version}'. Use vMAJOR.MINOR.PATCH, for example v1.1.1." >&2
+              exit 1
+              ;;
+          esac
+          if [[ ! "$release_version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Invalid release_version='${release_version}'. Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease." >&2
+            exit 1
+          fi
           case "${{ inputs.deployment_type }}" in
             iis|kubernetes) ;;
             *) echo "Unsupported deployment_type=${{ inputs.deployment_type }}" >&2; exit 1 ;;
           esac
 
   jira_validate:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.19
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-validation.yaml@v1.0.20
     needs: input_guard
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}
@@ -55,7 +70,7 @@ jobs:
     secrets: inherit
 
   governance:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-governance.yaml@v1.0.19
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-release-governance.yaml@v1.0.20
     needs: jira_validate
     with:
       application_name: ${{ inputs.application_name }}
@@ -78,7 +93,7 @@ jobs:
 
   iis_deploy:
     if: ${{ inputs.deployment_type == 'iis' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.19
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-iis-deploy.yaml@v1.0.20
     needs: [prod_gate, governance]
     with:
       application_name: ${{ inputs.application_name }}
@@ -95,7 +110,7 @@ jobs:
 
   gitops_update:
     if: ${{ inputs.deployment_type == 'kubernetes' }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.19
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-argocd-gitops-update.yaml@v1.0.20
     needs: [prod_gate, governance]
     with:
       application_name: ${{ inputs.application_name }}
@@ -110,7 +125,7 @@ jobs:
 
   jira_transition:
     if: ${{ always() && !cancelled() && (needs.iis_deploy.result == 'success' || needs.gitops_update.result == 'success') }}
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.19
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/reusable-jira-transition.yaml@v1.0.20
     needs: [iis_deploy, gitops_update]
     with:
       jira_issue_key: ${{ inputs.jira_issue_key }}
