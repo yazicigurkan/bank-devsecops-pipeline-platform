@@ -7,7 +7,7 @@ Uygulama repository'leri pipeline logic kopyalamaz. Sadece bu repodaki tag'lenmi
 ```yaml
 jobs:
   dev:
-    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.17
+    uses: yazicigurkan/bank-devsecops-pipeline-platform/.github/workflows/dotnet-dev-ci-cd.yaml@v1.0.19
     with:
       application_name: payment-api
       deployment_type: kubernetes
@@ -21,7 +21,7 @@ Son basarili DEV run:
 
 - Application repo: `yazicigurkan/banking-dotnet-payment-api`
 - Branch: `DEV`
-- Platform tag: `v1.0.17`
+- Platform tag: `v1.0.19`
 - Run: `https://github.com/yazicigurkan/banking-dotnet-payment-api/actions/runs/25274845379`
 - Result: success
 
@@ -333,7 +333,9 @@ bank-devsecops-pipeline-platform/
 `reusable-nexus-publish.yaml`
 
 - Build artifact'ini GitHub artifact'tan indirir.
-- Branch/environment/run number/commit SHA uyumlu versiyon uretir.
+- Nexus artifact version uretir.
+- DEV icin ephemeral format kullanir: `<application>-DEV-<short_sha>-<run_number>`.
+- TEST ve PROD icin OpenProject/Jira talebinden gelen release version kullanilir: ornek `v1.1.1`.
 - Nexus raw repository'ye artifact upload eder.
 
 `reusable-nexus-artifact-validation.yaml`
@@ -361,9 +363,12 @@ bank-devsecops-pipeline-platform/
 - Tag formati:
 
   ```text
-  <release_version>-<environment>-<short_sha>-<run_number>
+  DEV:  <application>-DEV-<short_sha>-<run_number>
+  TEST: <openproject_release_version>
+  PROD: TEST'te onaylanan ayni <openproject_release_version>
   ```
 
+- Ornekler: `payment-api-DEV-a1b2c3d-145`, `v1.1.1`.
 - Image'i local Docker daemon'da build eder.
 - Image tar dosyasini scan/push job'lari icin Actions artifact olarak saklar.
 
@@ -486,6 +491,8 @@ with:
 - TEST ortaminda release candidate uretilebilir.
 - PROD ortaminda rebuild alinmaz.
 - PROD sadece TEST'te onaylanmis artifact veya image'i promote eder.
+- DEV artifact/image versiyonu otomatik ve gecicidir: `<application>-DEV-<short_sha>-<run_number>`.
+- TEST ve PROD artifact/image versiyonu OpenProject talebindeki release version'dir; ayni `v1.1.1` hem TEST hem PROD promotion kimligidir.
 - Nexus artifact ve Harbor image immutable kabul edilmelidir.
 - Release manifest olmadan PROD deploy yapilmaz.
 

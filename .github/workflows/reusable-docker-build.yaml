@@ -32,8 +32,13 @@ jobs:
           ref: ${{ inputs.checkout_ref || github.ref_name }}
       - id: meta
         run: |
+          set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
-          tag="${{ inputs.release_version }}-${{ inputs.environment }}-${short_sha}-${{ github.run_number }}"
+          if [ "${{ inputs.environment }}" = "DEV" ]; then
+            tag="${{ inputs.application_name }}-DEV-${short_sha}-${{ github.run_number }}"
+          else
+            tag="${{ inputs.release_version }}"
+          fi
           image="${{ inputs.harbor_registry }}/${{ inputs.harbor_project }}/${{ inputs.image_name }}:${tag}"
           {
             echo "image_tag=${tag}"

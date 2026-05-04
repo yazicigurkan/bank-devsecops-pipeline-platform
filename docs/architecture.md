@@ -201,7 +201,7 @@ PROD deploy'da artifact tekrar uretilmez. Release manifestteki `artifactUrl` Nex
 Container akisi:
 
 1. Docker image build
-2. Tag uret: `{version}-{environment}-{shortSha}-{runNumber}`
+2. Tag uret: DEV icin `{application}-DEV-{shortSha}-{runNumber}`, TEST/PROD icin OpenProject release version
 3. Twistlock scan
 4. Policy check
 5. Harbor login/push
@@ -245,12 +245,11 @@ Audit:
 
 Version modeli:
 
-- Semantic version: `1.4.2`
-- Build metadata: GitHub run number
-- Commit identity: short SHA
-- Artifact version: `1.4.2-TEST-a1b2c3d-145`
-- Image tag: `payment-api:1.4.2-TEST-a1b2c3d-145`
-- PROD promotion: TEST image digest ayni kalir, opsiyonel PROD alias tag eklenir.
+- DEV artifact/image version: `payment-api-DEV-a1b2c3d-145`
+- TEST release version: OpenProject/Jira SDLC talebinden gelir, ornek `v1.1.1`
+- TEST Nexus artifact version: `v1.1.1`
+- TEST Harbor image tag: `payment-api:v1.1.1`
+- PROD promotion: PROD'da rebuild alinmaz; TEST'te onaylanan `v1.1.1` artifact/image digest ayni kalir.
 
 Release manifest ornegi:
 
@@ -260,8 +259,8 @@ Release manifest ornegi:
   "version": "1.4.2",
   "commitSha": "abc123",
   "artifactUrl": "https://nexus.bank.local/repository/releases/payment-api/1.4.2/payment-api.zip",
-  "image": "harbor.bank.local/payment/payment-api:1.4.2-TEST-abc123-145",
-  "imageTag": "1.4.2-TEST-abc123-145",
+  "image": "harbor.bank.local/payment/payment-api:1.4.2",
+  "imageTag": "1.4.2",
   "imageDigest": "sha256:example",
   "sonarQualityGate": "PASSED",
   "graphNode": {

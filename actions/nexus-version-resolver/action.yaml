@@ -13,6 +13,11 @@ runs:
     - id: version
       shell: bash
       run: |
+        set -euo pipefail
         short_sha="${GITHUB_SHA::7}"
-        echo "artifact_version=${{ inputs.release_version }}-${{ inputs.environment }}-${short_sha}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-
+        if [ "${{ inputs.environment }}" = "DEV" ]; then
+          artifact_version="${{ inputs.application_name }}-DEV-${short_sha}-${GITHUB_RUN_NUMBER}"
+        else
+          artifact_version="${{ inputs.release_version }}"
+        fi
+        echo "artifact_version=${artifact_version}" >> "$GITHUB_OUTPUT"

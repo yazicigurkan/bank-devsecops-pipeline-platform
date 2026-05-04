@@ -29,9 +29,10 @@ version="1.4.2"
 commit_sha="abc1234"
 run_number="145"
 jira_issue="SDLC-1234"
-test_tag="${version}-TEST-${commit_sha}-${run_number}"
-prod_tag="${version}-PROD-${commit_sha}-${run_number}"
-artifact_version="${version}-TEST-${commit_sha}-${run_number}"
+dev_version="${application}-DEV-${commit_sha}-${run_number}"
+test_tag="${version}"
+prod_tag="${version}"
+artifact_version="${version}"
 artifact_url="${nexus_dir}/dotnet-releases/${application}/${artifact_version}/${application}.zip"
 image_ref="harbor.bank.local/payment/${application}:${test_tag}"
 if command -v shasum >/dev/null 2>&1; then
@@ -96,11 +97,15 @@ simulate_dev() {
   jq -n \
     --arg application "$application" \
     --arg environment "DEV" \
+    --arg artifactVersion "$dev_version" \
+    --arg imageTag "$dev_version" \
     --arg sonarQualityGate "PASSED" \
     --arg graphNodeScanId "scan-dev-001" \
     --arg createdAt "$(date -Iseconds)" \
-    '{application:$application,environment:$environment,sonarQualityGate:$sonarQualityGate,graphNode:{scanId:$graphNodeScanId,critical:0,high:0},createdAt:$createdAt}' \
+    '{application:$application,environment:$environment,artifactVersion:$artifactVersion,imageTag:$imageTag,sonarQualityGate:$sonarQualityGate,graphNode:{scanId:$graphNodeScanId,critical:0,high:0},createdAt:$createdAt}' \
     > "${evidence_dir}/dev/deployment-evidence.json"
+  echo "[DEV] artifactVersion=${dev_version}"
+  echo "[DEV] imageTag=${dev_version}"
   echo "[DEV] evidence=${evidence_dir}/dev/deployment-evidence.json"
 }
 
@@ -140,7 +145,7 @@ simulate_prod() {
   "${root_dir}/scripts/release/validate-release-manifest.sh" "$manifest" "$application" "$version" "$jira_issue" "kubernetes" >/dev/null || return 1
   require_file "$(jq -r '.artifactUrl' "$manifest")" || return 1
 
-  echo "[PROD] rebuild is blocked by design; promoting approved TEST evidence only"
+  echo "[PROD] rebuild is blocked by design; promoting approved TEST release version only"
   jq --arg prodTag "$prod_tag" '.prodPromotion={imageTag:$prodTag,promotionType:"digest-preserving",rebuilt:false}' "$manifest" \
     > "${evidence_dir}/prod-deployment-evidence.json"
 

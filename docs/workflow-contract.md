@@ -65,6 +65,12 @@ PROD workflow'u su path'te release manifest bekler:
 ${NEXUS_BASE_URL}/repository/release-evidence/<application>/<version>/<artifact_version>/release-manifest.json
 ```
 
+Versioning kurali:
+
+- DEV artifact ve image tag formatı: `<application>-DEV-<short_sha>-<run_number>`.
+- TEST artifact ve image tag formatı: OpenProject/Jira talebindeki `release_version`, ornek `v1.1.1`.
+- PROD yeni build almaz; TEST manifestindeki artifact/image tag ve digest'i promote eder.
+
 Manifestte zorunlu alanlar:
 
 - `application`

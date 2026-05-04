@@ -30,8 +30,13 @@ jobs:
           name: ${{ inputs.artifact_name }}
       - id: meta
         run: |
+          set -euo pipefail
           short_sha="${GITHUB_SHA::7}"
-          version="${{ inputs.release_version }}-${{ inputs.environment }}-${short_sha}-${{ github.run_number }}"
+          if [ "${{ inputs.environment }}" = "DEV" ]; then
+            version="${{ inputs.application_name }}-DEV-${short_sha}-${{ github.run_number }}"
+          else
+            version="${{ inputs.release_version }}"
+          fi
           echo "artifact_version=${version}" >> "$GITHUB_OUTPUT"
       - id: upload
         env:
@@ -43,4 +48,3 @@ jobs:
           target="${NEXUS_BASE_URL}/repository/${{ inputs.nexus_repository }}/${{ inputs.application_name }}/${{ steps.meta.outputs.artifact_version }}/${{ inputs.application_name }}.zip"
           curl -fsS -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" --upload-file package.zip "$target"
           echo "artifact_url=${target}" >> "$GITHUB_OUTPUT"
-
